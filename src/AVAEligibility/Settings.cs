@@ -3,10 +3,13 @@ using AVAEligibility.Core.Inquiries;
 
 namespace AVAEligibility;
 
-/// <summary>What the program remembers between runs: who's asking (the inquiry settings). Kept in the settings folder.</summary>
+/// <summary>What the program remembers between runs: who's asking, and the clearinghouse. Kept in the settings folder; the clearinghouse's password is in a file of its own.</summary>
 public sealed class AppSettings
 {
     public InquirySettings Inquiry { get; set; } = new();
+
+    /// <summary>The clearinghouse to send to in real time; off until the person turns it on. Its password isn't here.</summary>
+    public Core.Sending.Clearinghouse Clearinghouse { get; set; } = new();
 
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
 

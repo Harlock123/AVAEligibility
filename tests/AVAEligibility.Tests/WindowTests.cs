@@ -159,3 +159,46 @@ public sealed class WorklistWindowTests
         finally { w.Close(); }
     });
 }
+
+/// <summary>Ask Now in the window: nothing is sent without the person's yes.</summary>
+public sealed class SendingWindowTests
+{
+    [Fact]
+    public void Ask_now_asks_first_then_sends_saves_and_opens_the_answers() => HeadlessApp.Run(() =>
+    {
+        using var mock = new MockClearinghouse();
+        var folder = Samples.Copy();
+        var w = new MainWindow { Now = () => InquiryTests.SampleTime };
+        w.Show();
+        try
+        {
+            w.Open(Path.Combine(folder, "appointments.csv"));
+            var s = InquiryTests.SampleSettings;
+            (w.ProviderNameBox.Text, w.ProviderNpiBox.Text, w.SenderIdBox.Text, w.ReceiverIdBox.Text, w.TraceOriginatorBox.Text) = (s.ProviderName, s.ProviderNpi, s.SenderId, s.ReceiverId, s.TraceOriginator);
+            w.Settings.Inquiry = w.Settings.Inquiry with { ControlNumber = 1001 };
+            HeadlessApp.Wait(w.AskNow());
+            Assert.Equal("Sending to a clearinghouse is off (Inquiries › Clearinghouse).", w.txtStatusBar.Text);
+            w.SendEnabledBox.IsChecked = true;
+            (w.EndpointBox.Text, w.CoreSenderBox.Text, w.CoreReceiverBox.Text, w.UserBox.Text, w.PasswordBox.Text) = (mock.Address, "MAPLESTFM", "MOCKCH", MockClearinghouse.User, MockClearinghouse.Password);
+            string? question = null;
+            w.AskSure = q => { question = q; return Task.FromResult(false); };
+            HeadlessApp.Wait(w.AskNow());
+            Assert.StartsWith("Send 12 eligibility questions to 127.0.0.1?", question);
+            Assert.Empty(mock.Requests);
+            w.AskSure = _ => Task.FromResult(true);
+            HeadlessApp.Wait(w.AskNow());
+            Assert.Equal("Asked 12: 12 answered.", w.txtStatusBar.Text);
+            Assert.Equal(12, mock.Requests.Count);
+            Assert.Equal(WorklistTests.SampleWork().Select(x => x.Word), w.Work.Select(x => x.Word));
+            Assert.Equal(2, w.Tabs.SelectedIndex);
+            Assert.DoesNotContain(MockClearinghouse.Password, File.ReadAllText(AppSettings.Path));
+            Assert.Equal(1013, AppSettings.Load().Inquiry.ControlNumber);
+        }
+        finally
+        {
+            new Core.Sending.PasswordStore(MainWindow.SettingsFolder).Forget();
+            new AppSettings().Save();
+            w.Close();
+        }
+    });
+}

@@ -4,7 +4,7 @@ Know who's covered before they arrive. AVA Eligibility reads HIPAA **270** eligi
 answers (005010X279A1) and says what they mean in plain words: whether the patient is active, the copay, how much
 deductible is left, what needs authorization, who the primary care provider is, and whether another payer comes first.
 
-*Work in progress: milestone 4 of 7 (the worklist: each visit ready or not, what to do, and an estimate).*
+*Work in progress: milestone 5 of 7 (asking a clearinghouse in real time, over CAQH CORE connectivity).*
 
 ## Running it
 

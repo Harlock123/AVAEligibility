@@ -44,9 +44,14 @@ ELIG_SHOTS=Screenshots dotnet test --filter Screenshots     # the README's pictu
     patient's ID, name or birth date differently; and an `Estimate`), `Changes` (what changed between two answers about
     the same person).
   - `Reports/WorklistReport.cs`: the worklist as an HTML page or an Excel workbook.
+  - `Sending/`: `CoreConnectivity` (`Clearinghouse`, off until turned on, HTTPS unless on this computer; `CoreClient`,
+    the CAQH CORE real-time envelope over HTTP MIME multipart or SOAP with WS-Security; `PasswordStore`, the password in
+    a file of its own, owner-only), `RealTime` (one 270 per appointment, under the traces the whole list's 270 gives,
+    each 271 saved beside the list).
 - `src/AVAEligibility/`: the window, built in code (`MainWindow.cs`: the list, the Coverage tab and the segments;
   `MainWindow.Answer.cs`: the reading of an answer, verdict first; `MainWindow.Inquiries.cs`: the Inquiries tab, the
-  settings and Write the 270; `MainWindow.Worklist.cs`: the Worklist tab and its export; `Settings.cs`: the settings file, in `MainWindow.SettingsFolder`, which tests point at a
+  settings and Write the 270; `MainWindow.Worklist.cs`: the Worklist tab and its export;
+  `MainWindow.Sending.cs`: the Clearinghouse section and Ask Now (asks first); `Settings.cs`: the settings file, in `MainWindow.SettingsFolder`, which tests point at a
   temporary folder;
   `MainWindow.Parts.cs`: the hooks later parts fill).
 - `tests/AVAEligibility.Tests/`: xUnit v3 on Avalonia.Headless.
@@ -70,6 +75,9 @@ ELIG_SHOTS=Screenshots dotnet test --filter Screenshots     # the README's pictu
 - **Estimates are labelled.** `Estimate.Assumes` says what each assumes (in network, the full charge allowed); every
   place that shows one says it's an estimate. No estimate when coverage isn't active, another payer is primary, or the
   answer doesn't say enough.
+- **Nothing is sent without the person.** Sending is off until they turn it on; Ask Now asks first, naming how many
+  questions and where; the address must be HTTPS unless it's this computer. Tests send only to `MockClearinghouse`,
+  on 127.0.0.1; never add a test that reaches a real clearinghouse. The password never goes in `settings.json`.
 - **The samples' 270 is what the app writes.** `InquiryTests` builds it from `appointments.csv` with the samples'
   settings and compares it byte for byte with `clinic-270.x12`: change the builder and `make_samples.py` together.
 - **Waiting on the UI thread:** a window test that awaits work started on the UI thread uses `HeadlessApp.Wait`, which

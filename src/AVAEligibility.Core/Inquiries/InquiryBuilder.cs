@@ -108,7 +108,9 @@ public static class InquiryBuilder
     }
 
     /// <summary>Builds the 270, leaving out the appointments with errors and the self-pay ones.</summary>
-    public static BuiltInquiry Build(IReadOnlyList<Appointment> appointments, InquirySettings settings, DateTime created)
+    /// <param name="traces">Traces to send each appointment under, instead of numbering them here (real-time sending
+    /// builds one 270 per appointment, under the traces the whole list would have).</param>
+    public static BuiltInquiry Build(IReadOnlyList<Appointment> appointments, InquirySettings settings, DateTime created, IReadOnlyDictionary<Appointment, string>? traces = null)
     {
         var checks = Check(appointments, DateOnly.FromDateTime(created)).ToList();
         if (!Npi.IsValid(settings.ProviderNpi))
@@ -118,7 +120,8 @@ public static class InquiryBuilder
 
         var bad = checks.Where(c => c.Level == CheckLevel.Error).Select(c => c.Appointment).ToHashSet();
         var send = appointments.Where(a => !a.SelfPay && !bad.Contains(a)).ToList();
-        var traces = new Dictionary<Appointment, string>();
+        var given = traces;
+        var sent = new Dictionary<Appointment, string>();
         var segments = new List<string>();
         var control = settings.ControlNumber;
         var stamp = created.ToString("HHmm", CultureInfo.InvariantCulture);
@@ -138,7 +141,7 @@ public static class InquiryBuilder
             var hl = 2;
             var traceNumber = 0;
             var prefix = new string(payer.Key.Where(char.IsLetterOrDigit).Take(2).ToArray()).ToUpperInvariant();
-            string Trace(Appointment a) => traces[a] = $"{prefix}{++traceNumber:D4}";
+            string Trace(Appointment a) => sent[a] = given != null && given.TryGetValue(a, out var t) ? t : $"{prefix}{++traceNumber:D4}";
             var people = payer.ToList();
             var done = new HashSet<Appointment>();
             foreach (var a in people)
@@ -193,7 +196,7 @@ public static class InquiryBuilder
         foreach (var s in segments) text.Append(s).Append('\n');
         text.Append(Seg("GE", transactions.ToString(CultureInfo.InvariantCulture), control.ToString(CultureInfo.InvariantCulture))).Append('\n');
         text.Append(Seg("IEA", "1", control.ToString("D9", CultureInfo.InvariantCulture))).Append('\n');
-        return new BuiltInquiry(text.ToString(), traces, checks, transactions);
+        return new BuiltInquiry(text.ToString(), sent, checks, transactions);
     }
 
     private static string Pad(string id) => id.Trim().ToUpperInvariant().PadRight(15)[..15];

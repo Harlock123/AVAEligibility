@@ -176,7 +176,7 @@ public sealed partial class MainWindow : Window
             }
             _open.RemoveAll(o => o.Path == full);
             _open.Add(file);
-            Opened(file);
+            FileOpened(file);
             FillList();
             var first = file.People.FirstOrDefault();
             if (first != null) ShowPerson(first);
@@ -192,7 +192,7 @@ public sealed partial class MainWindow : Window
     /// <summary>Whether a later part opens this file itself (an appointment list).</summary>
     private partial bool Takes(string path);
     private partial void OpenOther(string path);
-    partial void Opened(EligibilityFile file);
+    partial void FileOpened(EligibilityFile file);
 
     /// <summary>"a 271 from 1 payer about 9 people".</summary>
     public static string Summary(EligibilityFile f)

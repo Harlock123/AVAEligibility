@@ -81,7 +81,9 @@ public sealed partial class MainWindow
 
     partial void AppointmentsOpened();
 
-    partial void Opened(EligibilityFile file)
+    partial void AddSendingSection(StackPanel panel);
+
+    partial void FileOpened(EligibilityFile file)
     {
         FillInquiries();
         AnswersChanged();
@@ -147,6 +149,7 @@ public sealed partial class MainWindow
 
         InquiriesPanel.Children.Add(Section("Who's asking"));
         InquiriesPanel.Children.Add(SettingsPart());
+        AddSendingSection(InquiriesPanel);
 
         if (_appointments.Count > 0)
         {
