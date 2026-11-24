@@ -89,6 +89,10 @@ that started or ended.
 
 **View › Export the Worklist** writes it as an HTML page or an Excel workbook.
 
+The 271s it saves feed claims too: [AVA Claim Scrubber](https://github.com/Harlock123/AVAClaimScrubber) (1.1 and later)
+checks each claim against the payer's 271 about its patient before it's sent (coverage on the dates, the member found,
+another payer primary, a missing authorization), and its denial replay catches eligibility denials with them.
+
 ## Asking a clearinghouse
 
 **Inquiries › Clearinghouse** sends each appointment's question in real time, through the clearinghouse you set up,
