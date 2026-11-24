@@ -12,7 +12,7 @@ public sealed record Answer(Person? Person, EligibilityTransaction? Refusal, str
 
 /// <summary>
 /// Finds the 271 answer to a question: first by trace number (the 271 sends the 270's TRN back as TRN01 2, with the same
-/// originator), then by payer, member ID and name (and birth date when both sides have one). A payer that couldn't answer
+/// originator), then by payer and name with the member ID or, when the payer answers with a different ID, the birth date. A payer that couldn't answer
 /// at all (an AAA at its own level, no people) answers everyone asked of it with that refusal.
 /// </summary>
 public static class Matcher
@@ -39,7 +39,7 @@ public static class Matcher
             p.Last.Equals(last, StringComparison.OrdinalIgnoreCase) && p.First.Equals(first, StringComparison.OrdinalIgnoreCase)
             && (dependent
                 ? (p.IsDependent && (p.Subscriber?.MemberId ?? "").Equals(memberId, StringComparison.OrdinalIgnoreCase)) || p.MemberId.Length == 0
-                : p.MemberId.Equals(memberId, StringComparison.OrdinalIgnoreCase))
+                : p.MemberId.Equals(memberId, StringComparison.OrdinalIgnoreCase) || (born != null && p.BirthDate == born))
             && (born == null || p.BirthDate == null || p.BirthDate == born || p.Rejections.Count > 0));
         if (byWho != null) return new Answer(byWho, null, "member ID and name");
         var refusal = fromPayer.FirstOrDefault(t => t.People.Count == 0 && t.Payer?.Rejections.Count > 0);

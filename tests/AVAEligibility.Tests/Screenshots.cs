@@ -39,4 +39,26 @@ public sealed class Screenshots
         }
         finally { w.Close(); }
     });
+
+    [Fact]
+    public void Worklist() => HeadlessApp.Run(() =>
+    {
+        if (Folder() is not { } dir) return;
+        var folder = Samples.Copy();
+        var w = new MainWindow { Width = 1500, Height = 900, Now = () => InquiryTests.SampleTime };
+        w.Show();
+        try
+        {
+            w.Open(Path.Combine(folder, "appointments.csv"));
+            foreach (var f in WorklistTests.AnswerFiles) w.Open(Path.Combine(folder, f));
+            w.Tabs.SelectedIndex = 2;
+            Save(w, Path.Combine(dir, "worklist.png"));
+            w.ShowPerson(w.Work.Single(x => x.Appointment.First == "KENJI").Answer.Person!);
+            w.Tabs.SelectedIndex = 0;
+            Save(w, Path.Combine(dir, "visit.png"));
+            w.Tabs.SelectedIndex = 1;
+            Save(w, Path.Combine(dir, "inquiries.png"));
+        }
+        finally { w.Close(); }
+    });
 }

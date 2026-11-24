@@ -238,7 +238,7 @@ public sealed partial class MainWindow : Window
         _filling = false;
     }
 
-    private static Control EntryLabel(ListEntry e)
+    private Control EntryLabel(ListEntry e)
     {
         if (e.Person is { } p)
         {
@@ -263,13 +263,13 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>The person's mark in the list. Later parts give the verdict; until then, the answer's first word.</summary>
-    internal static (string Word, IBrush Brush) Mark(Person p) => MarkOf(p) ?? (!p.Transaction.IsResponse ? ("asked", Look.Accent)
+    internal (string Word, IBrush Brush) Mark(Person p) => MarkOf(p) ?? (!p.Transaction.IsResponse ? ("asked", Look.Accent)
         : p.Rejections.Count > 0 ? ("rejected", Look.Reject)
         : p.Benefits.Any(b => b.Information is "6" or "7" or "8") ? ("inactive", Look.Deny)
         : p.Benefits.Any(b => b.Information is "1" or "2" or "3" or "4" or "5") ? ("active", Look.Clean)
         : ("no answer", Look.Warn));
 
-    private static partial (string, IBrush)? MarkOf(Person p);
+    private partial (string, IBrush)? MarkOf(Person p);
 
     // ----- The Coverage tab -----
 

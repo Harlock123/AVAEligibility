@@ -204,6 +204,8 @@ def answer_people(payer_id):
                      seg("NM1", "P3", 1, DR_REYES[0], DR_REYES[1], "", "", "", "XX", DR_REYES[2]), seg("PER", "IC", "", "TE", "2175550188"), seg("LE", "2120")]
             out.append(("sub", body, []))
         elif first == "LOUISE":
+            # The payer finds her and answers with her full member ID: the registration lacks its 01 suffix.
+            name = seg("NM1", "IL", 1, last, first, middle, "", "", "MI", member + "01")
             body = echo + [name, seg("REF", "6P", "SMSILVER")] + address + [dmg, seg("DTP", "346", "D8", "20260101")]
             body += [eb(1, "IND", 30, "HM", "SUMMIT SILVER HMO"), eb("B", "IND", 98, "HM", "", 27, "30", "", "", "", "", "Y"),
                      eb("B", "IND", 86, "HM", "", 27, "300", "", "", "", "", "Y"), eb("C", "IND", 30, "HM", "", 23, "0", "", "", "", "", "Y"),
@@ -248,6 +250,31 @@ def dependent_emma():
             eb("A", "IND", "BZ", "PR", "", "", "", "0", "", "", "", "Y"), seg("MSG", "WELL CHILD CARE COVERED IN FULL IN NETWORK")]
 
 
+RECHECK = "20261215"
+
+
+def recheck():
+    """Bluewater's answer when the clinic asked again on 15 December: Daniel has met more of his deductible, Rose is
+    found now her birth date is right, and Marcus's Medicare coverage no longer shows."""
+    text = wrap(5101, "HB", "BWHP1X", "MAPLESTFM", [answer("BWHP1", 1)])
+    text = text.replace("*261125*0816*", "*261215*0816*").replace("*20261125*0816*", "*20261215*0816*").replace("*20261125*0816~", "*20261215*0816~")
+    text = text.replace("EB*C*IND*30*PR**29*1120*****Y~", "EB*C*IND*30*PR**29*845*****Y~")
+    text = text.replace("EB*G*IND*30*PR**29*5210*****Y~", "EB*G*IND*30*PR**29*4935*****Y~")
+    text = text.replace("EB*C*FAM*30*PR**29*2400*****Y~", "EB*C*FAM*30*PR**29*2125*****Y~")
+    rose = "NM1*IL*1*BRANNIGAN*ROSE****MI*BWH400100648~\nDMG*D8*19650218*F~\nAAA*N**71*C~"
+    assert rose in text
+    text = text.replace(rose, "NM1*IL*1*BRANNIGAN*ROSE****MI*BWH400100648~\nREF*6P*GRP77015*MAPLE TOOL AND DIE~\nDMG*D8*19650228*F~\nDTP*346*D8*20260101~\nEB*1*IND*30*PR*GOLD PPO 1500~\nEB*B*IND*98*PR**27*25*****Y~")
+    medicare = "EB*R**30*MB~\nREF*IG*4TQ8NJ2KR63~\nDTP*290*D8*20220701~\nLS*2120~\nNM1*PRP*2*MEDICARE PART B*****PI*MCRB1~\nLE*2120~\n"
+    assert medicare in text
+    text = text.replace(medicare, "").replace("GOLD PPO 1500 SECONDARY", "GOLD PPO 1500").replace("MSG*BENEFITS SHOWN ARE SECONDARY TO MEDICARE~\n", "")
+    # The SE counts change with the segments: recount them.
+    lines = text.split("\n")
+    start = next(i for i, l in enumerate(lines) if l.startswith("ST*"))
+    end = next(i for i, l in enumerate(lines) if l.startswith("SE*"))
+    lines[end] = seg("SE", end - start + 1, "0001")
+    return "\n".join(lines)
+
+
 def answer(payer_id, number):
     """One payer's 271."""
     payer = PAYERS[payer_id]
@@ -278,6 +305,9 @@ def main():
     for n, (payer_id, name) in enumerate(PAYERS.items(), 1):
         with open("{}-271.x12".format(name.split()[0].lower()), "w", newline="\n") as f:
             f.write(wrap(5000 + n, "HB", payer_id + "X", "MAPLESTFM", [answer(payer_id, 1)]))
+    os.makedirs("recheck", exist_ok=True)
+    with open(os.path.join("recheck", "bluewater-271-dec15.x12"), "w", newline="\n") as f:
+        f.write(recheck())
     with open("appointments.csv", "w", newline="") as f:
         w = csv.writer(f, lineterminator="\n")
         w.writerow(["Date", "Time", "Last name", "First name", "Middle", "Birth date", "Sex", "Payer ID", "Payer", "Member ID", "Subscriber", "Provider", "Provider NPI", "Visit", "Procedure", "Charge"])

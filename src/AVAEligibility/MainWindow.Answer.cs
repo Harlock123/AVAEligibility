@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using AVAEligibility.Core.Eligibility;
+using AVAEligibility.Core.Inquiries;
 
 namespace AVAEligibility;
 
@@ -15,6 +16,9 @@ public sealed partial class MainWindow
 {
     /// <summary>The date of service to read an answer for, when a later part knows it (the appointment list).</summary>
     private partial DateOnly? VisitDate(Person p);
+
+    /// <summary>The worklist's item for a person, when an appointment's answer is theirs.</summary>
+    private partial WorkItem? WorkItemFor(Person p);
 
     /// <summary>The reading of a person's answer, as the window shows it.</summary>
     public Interpretation? CurrentReading { get; private set; }
@@ -29,8 +33,9 @@ public sealed partial class MainWindow
         _ => Look.Accent,
     };
 
-    private static partial (string, IBrush)? MarkOf(Person p)
+    private partial (string, IBrush)? MarkOf(Person p)
     {
+        if (WorkItemFor(p) is { } item) return (item.Word, BrushOf(item.Verdict));
         var r = Interpreter.Read(p);
         return (r.Word, BrushOf(r.Verdict));
     }
@@ -44,21 +49,29 @@ public sealed partial class MainWindow
         }
         var r = Interpreter.Read(p, VisitDate(p));
         CurrentReading = r;
+        var item = WorkItemFor(p);
+        var verdict = item?.Verdict ?? r.Verdict;
+        var word = item?.Word ?? r.Word;
+        var headline = item?.Headline ?? r.Headline;
+        var notes = item?.Notes ?? r.Notes;
+        var decider = notes.FirstOrDefault(n => n.Level == verdict && n.Text == headline);
         var banner = new Border
         {
-            Background = new SolidColorBrush(((ISolidColorBrush)BrushOf(r.Verdict)).Color, 0.14),
-            BorderBrush = BrushOf(r.Verdict), BorderThickness = new Thickness(3, 0, 0, 0), Padding = new Thickness(12, 8), Margin = new Thickness(0, 10, 0, 4),
+            Background = new SolidColorBrush(((ISolidColorBrush)BrushOf(verdict)).Color, 0.14),
+            BorderBrush = BrushOf(verdict), BorderThickness = new Thickness(3, 0, 0, 0), Padding = new Thickness(12, 8), Margin = new Thickness(0, 10, 0, 4),
             Child = new StackPanel
             {
                 Children =
                 {
-                    new TextBlock { Text = r.Word.ToUpperInvariant(), Foreground = BrushOf(r.Verdict), FontWeight = FontWeight.Bold, FontSize = 13 },
-                    new TextBlock { Text = r.Headline, Foreground = Look.Text, FontSize = 15, TextWrapping = TextWrapping.Wrap },
+                    new TextBlock { Text = (item != null ? $"{word} for the visit on {item.Appointment.Date:yyyy-MM-dd}" : word).ToUpperInvariant(), Foreground = BrushOf(verdict), FontWeight = FontWeight.Bold, FontSize = 13 },
+                    new TextBlock { Text = headline, Foreground = Look.Text, FontSize = 15, TextWrapping = TextWrapping.Wrap },
+                    new TextBlock { Text = decider?.Fix ?? "", IsVisible = decider != null, Foreground = Look.Dim, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 0) },
                 },
             },
         };
+        if (decider != null) banner.PointerPressed += (_, _) => Highlight([.. decider.Segments.Select(x => x.Index)]);
         CoveragePanel.Children.Add(banner);
-        foreach (var n in r.Notes.OrderByDescending(n => n.Level))
+        foreach (var n in notes.Where(n => n != decider).OrderByDescending(n => n.Level))
         {
             var note = new StackPanel { Spacing = 1 };
             note.Children.Add(new TextBlock { Text = n.Text, Foreground = BrushOf(n.Level), TextWrapping = TextWrapping.Wrap });
@@ -66,6 +79,19 @@ public sealed partial class MainWindow
             CoveragePanel.Children.Add(ClickableBlock(note, n.Segments));
         }
 
+        if (item?.Estimate is { } estimate)
+        {
+            CoveragePanel.Children.Add(Section($"Estimate for the visit ({item.Appointment.Visit} {item.Appointment.Procedure}, charge {(item.Appointment.Charge is { } ch ? Words.Money(ch) : "not given")})"));
+            CoveragePanel.Children.Add(Line(estimate.ToString(), Look.Accent, []));
+            CoveragePanel.Children.Add(Dim($"An estimate: it assumes {estimate.Assumes}."));
+        }
+        if (Changes.Earlier(p, _open) is { } earlier)
+        {
+            var changes = Changes.Between(earlier, p);
+            CoveragePanel.Children.Add(Section($"Since the answer of {earlier.Transaction.Created:yyyy-MM-dd}"));
+            if (changes.Count == 0) CoveragePanel.Children.Add(Dim("Nothing has changed."));
+            foreach (var c in changes) CoveragePanel.Children.Add(Line(c, Look.Text, []));
+        }
         if (r.Active != null || r.Begins != null)
         {
             CoveragePanel.Children.Add(Section("Coverage"));

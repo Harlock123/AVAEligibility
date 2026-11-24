@@ -38,15 +38,21 @@ ELIG_SHOTS=Screenshots dotnet test --filter Screenshots     # the README's pictu
     `ServiceTypes` (what to ask for a visit: 30, and the care its procedure code falls in), `InquiryBuilder` (the checks
     before sending, then the 270: one transaction per payer, dependents under their subscriber, a trace per
     appointment; `Npi` check digits), `Matcher` (each question's answer: by trace, then by payer, member ID and name;
-    a payer that refused the whole batch answers everyone asked of it).
+    a payer that refused the whole batch answers everyone asked of it), `Worklist` (each appointment's `WorkItem`: its
+    answer read for the visit's date and care, plus what only the visit tells: its care needs authorization or isn't
+    covered, it uses one of a limited number of visits, it's with someone other than the PCP, the payer has the
+    patient's ID, name or birth date differently; and an `Estimate`), `Changes` (what changed between two answers about
+    the same person).
+  - `Reports/WorklistReport.cs`: the worklist as an HTML page or an Excel workbook.
 - `src/AVAEligibility/`: the window, built in code (`MainWindow.cs`: the list, the Coverage tab and the segments;
   `MainWindow.Answer.cs`: the reading of an answer, verdict first; `MainWindow.Inquiries.cs`: the Inquiries tab, the
-  settings and Write the 270; `Settings.cs`: the settings file, in `MainWindow.SettingsFolder`, which tests point at a
+  settings and Write the 270; `MainWindow.Worklist.cs`: the Worklist tab and its export; `Settings.cs`: the settings file, in `MainWindow.SettingsFolder`, which tests point at a
   temporary folder;
   `MainWindow.Parts.cs`: the hooks later parts fill).
 - `tests/AVAEligibility.Tests/`: xUnit v3 on Avalonia.Headless.
 - `samples/`: an invented clinic's 270, its payers' 271s and its appointment list, from `make_samples.py`; each patient
-  has one situation planted (see `PATIENTS` there).
+  has one situation planted (see `PATIENTS` there). `recheck/` holds Bluewater's answer when asked again on 15
+  December (kept out of `samples/` itself so opening the folder opens one day's answers).
 
 ## Rules that keep it working
 
@@ -61,6 +67,9 @@ ELIG_SHOTS=Screenshots dotnet test --filter Screenshots     # the README's pictu
   say (a copay it didn't send) stays empty. An estimate is labelled an estimate.
 - **Code lists:** the service types were checked against the table in CAQH CORE's Eligibility & Benefits Data Content
   Rule appendix (vEB.2.1); `ReaderTests` pins their number. Change a list only from a published source.
+- **Estimates are labelled.** `Estimate.Assumes` says what each assumes (in network, the full charge allowed); every
+  place that shows one says it's an estimate. No estimate when coverage isn't active, another payer is primary, or the
+  answer doesn't say enough.
 - **The samples' 270 is what the app writes.** `InquiryTests` builds it from `appointments.csv` with the samples'
   settings and compares it byte for byte with `clinic-270.x12`: change the builder and `make_samples.py` together.
 - **Waiting on the UI thread:** a window test that awaits work started on the UI thread uses `HeadlessApp.Wait`, which

@@ -17,7 +17,7 @@ public sealed class WindowTests
             Assert.Equal("Opened bluewater-271.x12: a 271 from 1 payer about 7 people.", w.txtStatusBar.Text);
             var entries = w.FileList.Items.OfType<ListEntry>().ToList();
             Assert.Equal(9, entries.Count);
-            Assert.Equal(["ready", "ready", "act first", "rejected", "rejected", "act first", "check"], entries.Where(e => e.Person != null).Select(e => MainWindow.Mark(e.Person!).Word));
+            Assert.Equal(["ready", "ready", "act first", "rejected", "rejected", "act first", "check"], entries.Where(e => e.Person != null).Select(e => w.Mark(e.Person!).Word));
             Assert.Equal("DANIEL", w.CurrentPerson!.First);
             w.Open(Samples.Path("cascade-271.x12"));
             w.FileList.SelectedItem = w.FileList.Items.OfType<ListEntry>().Single(e => e.Transaction?.Payer?.Name == "CASCADE MUTUAL" && e.Person == null);
@@ -113,5 +113,49 @@ public sealed class InquiryWindowTests
             AppSettings.Load().Save();
             w.Close();
         }
+    });
+}
+
+/// <summary>The Worklist tab and the Coverage tab read for the visit.</summary>
+public sealed class WorklistWindowTests
+{
+    [Fact]
+    public void The_worklist_lists_each_visit_and_a_person_shows_the_visits_estimate_and_changes() => HeadlessApp.Run(() =>
+    {
+        var folder = Samples.Copy();
+        var w = new MainWindow { Now = () => InquiryTests.SampleTime };
+        w.Show();
+        try
+        {
+            w.Open(Path.Combine(folder, "appointments.csv"));
+            Assert.All(w.Work.Where(x => !x.Appointment.SelfPay), x => Assert.Equal(Verdict.NoAnswer, x.Verdict));
+            foreach (var f in WorklistTests.AnswerFiles) w.Open(Path.Combine(folder, f));
+            Assert.Equal(["ready", "ready", "act first", "rejected", "rejected", "act first", "act first", "ready", "act first", "check", "rejected", "no answer", "self-pay"], w.Work.Select(x => x.Word));
+            Assert.Equal("act first", w.Mark(w.Work.Single(x => x.Appointment.First == "KENJI").Answer.Person!).Word);
+            var texts = w.WorklistPanel.GetLogicalDescendants().OfType<Avalonia.Controls.TextBlock>().Select(t => t.Text ?? "").ToList();
+            Assert.Contains("TUESDAY 1 DECEMBER 2026", texts);
+            Assert.Contains("4 act first", texts);
+            Assert.Contains("$538.00", texts);
+
+            w.Open(Path.Combine(folder, "recheck", "bluewater-271-dec15.x12"));
+            var daniel = w.OpenFiles.Single(f => f.Name == "bluewater-271-dec15.x12").People.First();
+            w.ShowPerson(daniel);
+            texts = WindowTests.Texts(w);
+            Assert.Contains("SINCE THE ANSWER OF 2026-11-25", texts);
+            Assert.Contains("Deductible, individual, in network: $845.00 left (was $1,120.00; $275.00 used since).", texts);
+
+            var kenji = w.Work.Single(x => x.Appointment.First == "KENJI").Answer.Person!;
+            w.ShowPerson(kenji);
+            texts = WindowTests.Texts(w);
+            Assert.Contains("ACT FIRST FOR THE VISIT ON 2026-12-02", texts);
+            Assert.Contains("About $538.00: $310.00 of deductible left, then 20% coinsurance on $1,140.00", texts);
+
+            var output = Path.Combine(folder, "worklist.xlsx");
+            w.PickSaveFile = (_, _) => Task.FromResult<string?>(output);
+            HeadlessApp.Wait(w.ExportWorklist());
+            Assert.Equal("Wrote worklist.xlsx: 13 visits.", w.txtStatusBar.Text);
+            Assert.True(File.Exists(output));
+        }
+        finally { w.Close(); }
     });
 }
