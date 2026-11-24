@@ -62,6 +62,13 @@ PATIENTS = [
 ]
 
 
+def asked(procedure):
+    """What the 270 asks about for a visit: plan coverage and the procedure's kind of care (as AVA Eligibility's
+    ServiceTypes maps them: office visits 98, preventive BZ, psychotherapy MH, MRI 62)."""
+    care = {"99213": "98", "99214": "98", "99393": "BZ", "90837": "MH", "72148": "62"}[procedure]
+    return "30^" + care
+
+
 def seg(*elements):
     """A segment, with trailing empty elements left off."""
     parts = list(elements)
@@ -120,7 +127,7 @@ def inquiries():
             body.append(seg("NM1", "IL", 1, p[2], p[3], p[4], "", "", "MI", p[8]))
             body.append(seg("DMG", "D8", p[5], p[6]))
             body.append(seg("DTP", "291", "D8", d8(p[0])))
-            body.append(seg("EQ", "30^98" if p[11] != "72148" else "30^62"))
+            body.append(seg("EQ", asked(p[11])))
             # A dependent's visit goes under its own HL, below its subscriber.
             if dependents:
                 for q in dependents:
@@ -130,7 +137,7 @@ def inquiries():
                     body.append(seg("NM1", "03", 1, q[2], q[3], q[4]))
                     body.append(seg("DMG", "D8", q[5], q[6]))
                     body.append(seg("DTP", "291", "D8", d8(q[0])))
-                    body.append(seg("EQ", "30^98"))
+                    body.append(seg("EQ", asked(q[11])))
             i += 1 + len(dependents)
         out.append(transaction("270", number, body))
     return out

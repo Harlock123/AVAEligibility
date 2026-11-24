@@ -19,6 +19,21 @@ public static class HeadlessApp
         HeadlessUnitTestSession.GetOrStartForAssembly(typeof(HeadlessApp).Assembly)
             .Dispatch(action, CancellationToken.None).GetAwaiter().GetResult();
 
+    /// <summary>Waits for a task started on the UI thread, letting the UI thread run meanwhile (blocking it would deadlock).</summary>
+    public static T Wait<T>(Task<T> task, int seconds = 30)
+    {
+        for (var i = 0; i < seconds * 500 && !task.IsCompleted; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(2);
+        }
+        Assert.True(task.IsCompleted, "It didn't finish in time.");
+        Dispatcher.UIThread.RunJobs();
+        return task.GetAwaiter().GetResult();
+    }
+
+    public static void Wait(Task task, int seconds = 30) => Wait(task.ContinueWith(t => { t.GetAwaiter().GetResult(); return true; }, TaskScheduler.Default), seconds);
+
     /// <summary>Lets queued UI work run.</summary>
     public static void Settle(int times = 20)
     {
@@ -28,4 +43,12 @@ public static class HeadlessApp
             Thread.Sleep(2);
         }
     }
+}
+
+/// <summary>Before any test runs, the program's settings folder is a temporary one: no test reads or writes the person's own.</summary>
+internal static class SettingsIsolation
+{
+    [System.Runtime.CompilerServices.ModuleInitializer]
+    internal static void Isolate() =>
+        AVAEligibility.MainWindow.FolderOverride = Directory.CreateTempSubdirectory("avaeligibility-settings-").FullName;
 }

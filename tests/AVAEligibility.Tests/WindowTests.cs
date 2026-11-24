@@ -68,3 +68,50 @@ public sealed class WindowTests
     internal static List<string> Texts(MainWindow w) =>
         w.CoveragePanel.GetLogicalDescendants().OfType<Avalonia.Controls.TextBlock>().Select(t => t.Text ?? "").ToList();
 }
+
+/// <summary>The Inquiries tab: an appointment list opened, checked and written as a 270, and the answers matched.</summary>
+public sealed class InquiryWindowTests
+{
+    [Fact]
+    public void An_appointment_list_is_checked_written_as_a_270_and_its_answers_found() => HeadlessApp.Run(() =>
+    {
+        var folder = Samples.Copy();
+        var w = new MainWindow { Now = () => InquiryTests.SampleTime };
+        w.Show();
+        try
+        {
+            w.Open(Path.Combine(folder, "appointments.csv"));
+            Assert.Equal(13, w.Appointments.Count);
+            Assert.Equal("Opened appointments.csv: 13 appointments; 0 can't be asked as they are, 1 warnings.", w.txtStatusBar.Text);
+            Assert.Equal(1, w.Tabs.SelectedIndex);
+            var s = InquiryTests.SampleSettings;
+            w.ProviderNameBox.Text = s.ProviderName;
+            w.ProviderNpiBox.Text = "1642031871";
+            w.SenderIdBox.Text = s.SenderId;
+            w.ReceiverIdBox.Text = s.ReceiverId;
+            w.TraceOriginatorBox.Text = s.TraceOriginator;
+            w.Settings.Inquiry = w.Settings.Inquiry with { ReferencePrefix = "MSFM", ControlNumber = 1001 };
+            var output = Path.Combine(folder, "out.x12");
+            w.PickSaveFile = (_, _) => Task.FromResult<string?>(output);
+            HeadlessApp.Wait(w.WriteInquiry());
+            Assert.Contains("isn't a valid NPI", w.txtStatusBar.Text);
+            Assert.False(File.Exists(output));
+            w.ProviderNpiBox.Text = s.ProviderNpi;
+            HeadlessApp.Wait(w.WriteInquiry());
+            Assert.Equal("Wrote out.x12: 12 questions to 4 payers.", w.txtStatusBar.Text);
+            Assert.Equal(File.ReadAllText(Samples.Path("clinic-270.x12")), File.ReadAllText(output));
+            Assert.Equal(1002, AppSettings.Load().Inquiry.ControlNumber);
+            Assert.Equal("1642031870", AppSettings.Load().Inquiry.ProviderNpi);
+
+            foreach (var f in new[] { "bluewater-271.x12", "prairie-271.x12", "summit-271.x12", "cascade-271.x12" }) w.Open(Path.Combine(folder, f));
+            var texts = w.InquiriesPanel.GetLogicalDescendants().OfType<Avalonia.Controls.TextBlock>().Select(t => t.Text ?? "").ToList();
+            Assert.Contains("QUESTIONS AND ANSWERS: 12 ASKED, 11 ANSWERED", texts);
+            Assert.Contains(texts, t => t.StartsWith("ODUYA, SAMUEL · CASCADE MUTUAL · trace CS0001 · CASCADE MUTUAL: Unable to Respond at Current Time (42).", StringComparison.Ordinal));
+        }
+        finally
+        {
+            AppSettings.Load().Save();
+            w.Close();
+        }
+    });
+}

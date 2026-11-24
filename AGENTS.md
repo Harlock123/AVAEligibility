@@ -34,8 +34,15 @@ ELIG_SHOTS=Screenshots dotnet test --filter Screenshots     # the README's pictu
     to do and the segments it rests on, and the benefits grouped as a front desk reads them: `CostRow`s, `Accumulator`s,
     `Limit`s, `Authorization`s, `OtherPayer`s, the PCP, what isn't covered; `Interpreter.Fix` says what to do about
     each AAA reason).
+  - `Inquiries/`: `Appointments` (`AppointmentList`: a CSV or Excel schedule read by its headers, in any order),
+    `ServiceTypes` (what to ask for a visit: 30, and the care its procedure code falls in), `InquiryBuilder` (the checks
+    before sending, then the 270: one transaction per payer, dependents under their subscriber, a trace per
+    appointment; `Npi` check digits), `Matcher` (each question's answer: by trace, then by payer, member ID and name;
+    a payer that refused the whole batch answers everyone asked of it).
 - `src/AVAEligibility/`: the window, built in code (`MainWindow.cs`: the list, the Coverage tab and the segments;
-  `MainWindow.Answer.cs`: the reading of an answer, verdict first;
+  `MainWindow.Answer.cs`: the reading of an answer, verdict first; `MainWindow.Inquiries.cs`: the Inquiries tab, the
+  settings and Write the 270; `Settings.cs`: the settings file, in `MainWindow.SettingsFolder`, which tests point at a
+  temporary folder;
   `MainWindow.Parts.cs`: the hooks later parts fill).
 - `tests/AVAEligibility.Tests/`: xUnit v3 on Avalonia.Headless.
 - `samples/`: an invented clinic's 270, its payers' 271s and its appointment list, from `make_samples.py`; each patient
@@ -54,6 +61,10 @@ ELIG_SHOTS=Screenshots dotnet test --filter Screenshots     # the README's pictu
   say (a copay it didn't send) stays empty. An estimate is labelled an estimate.
 - **Code lists:** the service types were checked against the table in CAQH CORE's Eligibility & Benefits Data Content
   Rule appendix (vEB.2.1); `ReaderTests` pins their number. Change a list only from a published source.
+- **The samples' 270 is what the app writes.** `InquiryTests` builds it from `appointments.csv` with the samples'
+  settings and compares it byte for byte with `clinic-270.x12`: change the builder and `make_samples.py` together.
+- **Waiting on the UI thread:** a window test that awaits work started on the UI thread uses `HeadlessApp.Wait`, which
+  runs the UI thread's jobs while it waits; `.GetResult()` there deadlocks.
 - **No real data in the repository.** Every person, payer, member ID and NPI in the samples is invented.
 
 ## Making a change
