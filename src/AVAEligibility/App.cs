@@ -21,9 +21,13 @@ public sealed class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            // AVAEligibility [files…]: opens 270s, 271s and appointment lists.
+            // AVAEligibility [files…] [--real | --mask]: opens 270s, 271s and appointment lists; the flags say what AI agents see.
             var args = desktop.Args ?? [];
-            desktop.MainWindow = new MainWindow(args.Where(a => !a.StartsWith("--", StringComparison.Ordinal)));
+            desktop.MainWindow = new MainWindow(args.Where(a => !a.StartsWith("--", StringComparison.Ordinal)))
+            {
+                RealFromCommandLine = args.Contains("--real"),
+                ForceDeidentify = args.Contains("--mask"),
+            };
         }
         base.OnFrameworkInitializationCompleted();
     }

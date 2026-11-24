@@ -33,12 +33,12 @@ public static class WorklistReport
         {
             var a = w.Appointment;
             var css = w.Word.Split(' ')[0];
-            b.Append("<tr><td>").Append(H($"{a.Date:yyyy-MM-dd} {a.Time}")).Append("</td><td>").Append(H(Who(w, mask))).Append("</td><td>")
+            b.Append("<tr><td>").Append(H(mask($"{a.Date:yyyy-MM-dd} {a.Time}"))).Append("</td><td>").Append(H(Who(w, mask))).Append("</td><td>")
              .Append(H(a.SelfPay ? "self-pay" : $"{a.Payer} {mask(a.MemberId)}")).Append("</td><td>").Append(H($"{a.Visit} {a.Procedure}")).Append("</td><td class=\"")
              .Append(css).Append("\"><b>").Append(H(w.Word)).Append("</b></td><td>");
             foreach (var n in w.Notes.OrderByDescending(n => n.Level))
-                b.Append("<div>").Append(H(mask(n.Text))).Append("<div class=\"fix\">").Append(H(n.Fix)).Append("</div></div>");
-            b.Append("</td><td>").Append(w.Estimate is { } e ? H($"{Words.Money(e.Amount)}") + "<div class=\"fix\">" + H(e.Basis) + "</div>" : "").Append("</td></tr>");
+                b.Append("<div>").Append(H(mask(n.Text))).Append("<div class=\"fix\">").Append(H(mask(n.Fix))).Append("</div></div>");
+            b.Append("</td><td>").Append(w.Estimate is { } e ? H($"{Words.Money(e.Amount)}") + "<div class=\"fix\">" + H(mask(e.Basis)) + "</div>" : "").Append("</td></tr>");
         }
         b.Append("</table><p><small>Estimates assume the provider is in network and the payer allows the full charge; the payer's own adjudication decides.</small></p></body></html>");
         return b.ToString();
@@ -57,7 +57,7 @@ public static class WorklistReport
         {
             var a = w.Appointment;
             var top = w.Notes.OrderByDescending(n => n.Level).FirstOrDefault();
-            sheet.Cell(r, 1).Value = a.Date?.ToString("yyyy-MM-dd") ?? "";
+            sheet.Cell(r, 1).Value = mask(a.Date?.ToString("yyyy-MM-dd") ?? "");
             sheet.Cell(r, 2).Value = a.Time;
             sheet.Cell(r, 3).Value = Who(w, mask);
             sheet.Cell(r, 4).Value = a.SelfPay ? "self-pay" : a.Payer;
@@ -66,12 +66,12 @@ public static class WorklistReport
             sheet.Cell(r, 7).Value = a.Procedure;
             sheet.Cell(r, 8).Value = w.Word;
             sheet.Cell(r, 9).Value = string.Join(" ", w.Notes.OrderByDescending(n => n.Level).Select(n => mask(n.Text)));
-            sheet.Cell(r, 10).Value = top?.Fix ?? "";
+            sheet.Cell(r, 10).Value = mask(top?.Fix ?? "");
             if (w.Estimate is { } e)
             {
                 sheet.Cell(r, 11).Value = e.Amount;
                 sheet.Cell(r, 11).Style.NumberFormat.Format = "$#,##0.00";
-                sheet.Cell(r, 12).Value = e.Basis;
+                sheet.Cell(r, 12).Value = mask(e.Basis);
             }
             r++;
         }

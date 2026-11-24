@@ -110,7 +110,11 @@ public sealed partial class MainWindow
             Say(e.Message);
             return;
         }
-        if (!await AskSure($"Send {count} eligibility questions to {new Uri(ch.Endpoint).Host}?\n\nEach holds a patient's name, birth date and member ID. The answers are saved beside the appointment list.")) return;
+        if (!await AskSure($"Send {count} eligibility questions to {new Uri(ch.Endpoint).Host}?\n\nEach holds a patient's name, birth date and member ID. The answers are saved beside the appointment list."))
+        {
+            Say("Nothing was sent.");
+            return;
+        }
         var folder = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(_appointmentsPath!)!, $"{System.IO.Path.GetFileNameWithoutExtension(_appointmentsPath)}-answers-{Now():yyyyMMdd-HHmm}");
         using var http = MakeHttp();
         IReadOnlyList<Asked> asked;

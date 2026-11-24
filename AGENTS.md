@@ -6,14 +6,19 @@ how the code is put together and the rules that keep it working.
 ## What this is
 
 A HIPAA eligibility workbench in C# on .NET 10 and Avalonia 11.3: it reads 270 inquiries and 271 answers (005010X279A1)
-and says what each answer means for each patient, in plain words.
+and says what each answer means for each patient and visit, in plain words; it checks an appointment list and writes the
+270, asks a clearinghouse in real time (CAQH CORE, off until turned on), and keeps the day's worklist. It has an AI Chat
+(F12) and an MCP server (`--mcp`, `--mcp --attach`, `--http`, port 8779); agents see people's details masked unless the
+person allows otherwise.
 
 ## Commands
 
 ```bash
 dotnet build AVAEligibility.slnx
 dotnet test AVAEligibility.slnx
-dotnet run --project src/AVAEligibility [files or folders]
+dotnet run --project src/AVAEligibility [files or folders] [--real | --mask]
+dotnet run --project src/AVAEligibility -- --mcp --root samples     # the MCP server on stdio (--attach: the open window)
+ELIG_LIVE_SERVER=http://localhost:11434 ELIG_LIVE_MODEL=qwen3:1.7b dotnet test --filter LiveModelTests
 cd samples && python3 make_samples.py        # remakes the samples (deterministic: tests pin what each says)
 ELIG_SHOTS=Screenshots dotnet test --filter Screenshots     # the README's pictures, headless
 ```
@@ -23,8 +28,8 @@ ELIG_SHOTS=Screenshots dotnet test --filter Screenshots     # the README's pictu
 ## Layout
 
 - `src/AVAEligibility.Core/`: no Avalonia.
-  - `X12/`: `Segment`, `Delimiters`, `X12File`, `Deidentifier`: X12 Explorer's (`~/RiderProjects/X12_820Explorer`), by
-    way of AVAClaimScrubber, with the namespace changed. Fix them together.
+  - `X12/`: `Segment`, `Delimiters`, `X12File`: X12 Explorer's (`~/RiderProjects/X12_820Explorer`), by way of
+    AVAClaimScrubber, with the namespace changed. Fix them together.
   - `Eligibility/`: `Codes` (the 005010X279A1 code lists, worded as X12 publishes them: EB01 to EB12, service types,
     AAA reasons and follow-ups, DTP, REF and NM1 qualifiers), `EligibilityModel` (`EligibilityFile`,
     `EligibilityTransaction`, `Party`, `Person`, `Benefit`, `Rejection`, `Inquiry`…; every item keeps the segments
@@ -44,6 +49,8 @@ ELIG_SHOTS=Screenshots dotnet test --filter Screenshots     # the README's pictu
     patient's ID, name or birth date differently; and an `Estimate`), `Changes` (what changed between two answers about
     the same person).
   - `Reports/WorklistReport.cs`: the worklist as an HTML page or an Excel workbook.
+  - `Privacy/Masker.cs`: people's details as agents see them: every name, ID, identifier and address in the open files
+    and the appointment list masked to its shape wherever it turns up, addresses hidden, every date to its year.
   - `Sending/`: `CoreConnectivity` (`Clearinghouse`, off until turned on, HTTPS unless on this computer; `CoreClient`,
     the CAQH CORE real-time envelope over HTTP MIME multipart or SOAP with WS-Security; `PasswordStore`, the password in
     a file of its own, owner-only), `RealTime` (one 270 per appointment, under the traces the whole list's 270 gives,
@@ -54,7 +61,18 @@ ELIG_SHOTS=Screenshots dotnet test --filter Screenshots     # the README's pictu
   `MainWindow.Sending.cs`: the Clearinghouse section and Ask Now (asks first); `Settings.cs`: the settings file, in `MainWindow.SettingsFolder`, which tests point at a
   temporary folder;
   `MainWindow.Parts.cs`: the hooks later parts fill).
-- `tests/AVAEligibility.Tests/`: xUnit v3 on Avalonia.Headless.
+- `src/AVAEligibility.Mcp/`: the MCP server, no Avalonia. `EligibilityTools.cs` (the tools; people by handle, P01…
+  and V01…; `Finish` masks every string of every answer unless values are allowed), `EligibilityTools.Orchestration.cs`
+  (batch, steps files, checkpoints of what's open and the view), `Hosting.cs` (`ViewState`, `IExplorerSession`,
+  `HeadlessSession`), `EligibilityServer.cs` (the instructions), `Recipes.cs` (8). `LiveListener`, `LiveBridge`,
+  `NetworkListener`, `McpCommandLine`, `Workspace` and `Json` are AVAClaimScrubber's with the names changed.
+- `src/AVAEligibility/`'s AI side: `MainWindow.AI.cs` (the AI menu, the chat's dock, the view as agents see and set it),
+  `MainWindow.Agents.cs` (the doors, `AgentsSeeRealValues`), `Agents/` (`Chat/` and `ChatPanel.cs`: copies of AVA
+  Modeler's chat, by way of AVAClaimScrubber, with this app's wording; `LiveAgents.cs`, `AgentMain.cs`,
+  `AgentSettings.cs`), `ViewPainter.cs`.
+- `tests/AVAEligibility.Tests/`: xUnit v3 on Avalonia.Headless. `Agents/AgentTests` (every tool, the no-leak test, every
+  recipe, the chat on `FakeModelServer` and `FakeMessagesServer`), `LiveAgentTests` (the doors), `LiveModelTests`
+  (opt-in), `MockClearinghouse` (the only clearinghouse tests talk to).
 - `samples/`: an invented clinic's 270, its payers' 271s and its appointment list, from `make_samples.py`; each patient
   has one situation planted (see `PATIENTS` there). `recheck/` holds Bluewater's answer when asked again on 15
   December (kept out of `samples/` itself so opening the folder opens one day's answers).
@@ -82,6 +100,14 @@ ELIG_SHOTS=Screenshots dotnet test --filter Screenshots     # the README's pictu
   settings and compares it byte for byte with `clinic-270.x12`: change the builder and `make_samples.py` together.
 - **Waiting on the UI thread:** a window test that awaits work started on the UI thread uses `HeadlessApp.Wait`, which
   runs the UI thread's jobs while it waits; `.GetResult()` there deadlocks.
+- **The no-leak test is the contract.** `AgentTests.No_tool_result_…` calls every reading tool on everyone in the
+  samples and fails if any answer, or any file an agent wrote, holds a name, member ID, identifier, address, birth date
+  or visit date from the samples (`Phi()`). A new tool goes into it; a new place people's details come from goes into
+  `Masker` and `Phi()`.
+- **Agents never send and never write people's details unasked.** `ask_clearinghouse` runs only in the open window and
+  goes through Ask Now's question; `write_inquiry` needs values allowed; reports are masked unless allowed.
+- **New tools** need `[Description]` on the tool and every parameter (snake_case names), a place in
+  `AgentTests.ToolNames`, a test, and a line in the README. Recipes are run call by call.
 - **No real data in the repository.** Every person, payer, member ID and NPI in the samples is invented.
 
 ## Making a change
