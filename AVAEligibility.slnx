@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AVAEligibility.Core/AVAEligibility.Core.csproj" />
+    <Project Path="src/AVAEligibility/AVAEligibility.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AVAEligibility.Tests/AVAEligibility.Tests.csproj" />
+  </Folder>
+</Solution>
