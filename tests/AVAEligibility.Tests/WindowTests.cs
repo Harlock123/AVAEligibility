@@ -17,6 +17,7 @@ public sealed class WindowTests
             Assert.Equal("Opened bluewater-271.x12: a 271 from 1 payer about 7 people.", w.txtStatusBar.Text);
             var entries = w.FileList.Items.OfType<ListEntry>().ToList();
             Assert.Equal(9, entries.Count);
+            Assert.Equal(["ready", "ready", "act first", "rejected", "rejected", "act first", "check"], entries.Where(e => e.Person != null).Select(e => MainWindow.Mark(e.Person!).Word));
             Assert.Equal("DANIEL", w.CurrentPerson!.First);
             w.Open(Samples.Path("cascade-271.x12"));
             w.FileList.SelectedItem = w.FileList.Items.OfType<ListEntry>().Single(e => e.Transaction?.Payer?.Name == "CASCADE MUTUAL" && e.Person == null);
@@ -42,6 +43,9 @@ public sealed class WindowTests
             Assert.Contains("KENJI NAKAMURA", texts);
             Assert.Contains("BLUEWATER HEALTH PLAN · member BWH400100815 · born 1979-12-19 · male · trace BW0007", texts);
             Assert.Contains("“PRIOR AUTHORIZATION REQUIRED FOR ADVANCED IMAGING”", texts);
+            Assert.Contains("CHECK", texts);
+            Assert.Contains("Get it from BLUEWATER UTILIZATION REVIEW at 800-555-0147 before scheduling it.", texts);
+            Assert.Equal(Verdict.Check, w.CurrentReading!.Verdict);
             w.Highlight([.. kenji.Benefits[1].Segments.Select(s => s.Index)]);
             Assert.StartsWith("EB*1*IND*62*PR*******Y*Y~MSG*PRIOR AUTHORIZATION", w.Highlighted);
         }

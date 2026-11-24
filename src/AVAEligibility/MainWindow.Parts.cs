@@ -1,6 +1,5 @@
 using Avalonia.Controls;
 using Avalonia.Input;
-using Avalonia.Media;
 using AVAEligibility.Core.Eligibility;
 
 namespace AVAEligibility;
@@ -14,6 +13,5 @@ public sealed partial class MainWindow
     private partial IEnumerable<object> MoreViewItems(Func<string, Action, Key?, KeyModifiers, MenuItem> item) => [];
     private partial bool Takes(string path) => false;
     private partial void OpenOther(string path) { }
-    private static partial (string, IBrush)? MarkOf(Person p) => null;
-    private partial bool ShowAnswer(Person p) => false;
+    private partial DateOnly? VisitDate(Person p) => null;
 }

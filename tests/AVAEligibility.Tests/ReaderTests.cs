@@ -122,4 +122,32 @@ public sealed class ReaderTests
             Assert.All(list, kv => Assert.False(string.IsNullOrWhiteSpace(kv.Value), kv.Key));
         Assert.Equal(187, Codes.ServiceType.Count);
     }
+
+    /// <summary>Segments shaped like those in CMS's HETS 270/271 companion guide's Part B-ID example (its own words, invented person).</summary>
+    [Fact]
+    public void A_medicare_style_answer_with_long_repeats_and_a_bar_component_separator_reads()
+    {
+        const string text = "ISA*00*          *00*          *ZZ*CMS            *ZZ*SUBMITTER      *241215*1200*^*00501*000000001*0*P*|~" +
+            "GS*HB*CMS*SUBMITTER*20241215*1200*1*X*005010X279A1~ST*271*0001*005010X279A1~BHT*0022*11*TRACE*20241215*1200~" +
+            "HL*1**20*1~NM1*PR*2*CMS*****PI*CMS~HL*2*1*21*1~NM1*1P*2*A CLINIC*****XX*1234567893~HL*3*2*22*0~" +
+            "NM1*IL*1*DOE*JANE****MI*9AA9AA9AA99~DMG*D8*19500101*F~DTP*307*RD8*20250101-20250104~" +
+            "EB*I**41^54~EB*6**88~EB*6**30^RN*MA~EB*1**30*MB~DTP*291*D8*20250101~MSG*P–Part B Immunosuppressive Drug Benefit~" +
+            "EB*6**2^23^24^25^26^27^28^3^33^36^37^38^39^40^42^50^51^52^53^67^69^73^76^83^86^98^A4^A6^A8^AI^AJ^AK^AL^BT^BU^BV^DM^RN^UC*MB~" +
+            "EB*C**30*MB**23*226~DTP*291*RD8*20250101-20251231~EB*C**30*MB**29*226~EB*A**30*MB**27**.2~EB*6***MB*********HC|86704~" +
+            "SE*21*0001~GE*1*1~IEA*1*000000001~";
+        var f = EligibilityReader.Parse(text);
+        Assert.Empty(f.Problems);
+        var jane = Assert.Single(f.People);
+        Assert.Equal(("2025-01-01 to 2025-01-04", "Eligibility"), (jane.Dates[0].ToString(), jane.Dates[0].Kind));
+        Assert.Equal(9, jane.Benefits.Count);
+        Assert.Equal(39, jane.Benefits[4].ServiceTypes.Count);
+        Assert.Equal("Non-Covered, Routine (Preventive) Dental, Long Term Care", Words.Describe(jane.Benefits[0]));
+        Assert.Equal(("HC", "86704"), (jane.Benefits[8].ProcedureQualifier, jane.Benefits[8].Procedure));
+        Assert.Equal("Inactive, procedure 86704, Medicare Part B", Words.Describe(jane.Benefits[8]));
+        Assert.Equal("Co-Insurance: 20% per visit, Health Benefit Plan Coverage", Words.Describe(jane.Benefits[7]));
+        var r = Interpreter.Read(jane);
+        Assert.Equal((true, "MB"), (r.Active, r.InsuranceType));
+        Assert.Equal("Deductible, individual: $226.00 per calendar year, $226.00 left, $0.00 met", Assert.Single(r.Accumulators).ToString());
+        Assert.Equal((new DateOnly(2025, 1, 1), new DateOnly(2025, 1, 4)), (r.Begins, r.Ends));
+    }
 }

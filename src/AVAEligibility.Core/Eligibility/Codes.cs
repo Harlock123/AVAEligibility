@@ -2,8 +2,10 @@ namespace AVAEligibility.Core.Eligibility;
 
 /// <summary>
 /// The code lists a 270 and 271 use (005010X279A1), worded as X12's published code lists word them. The service type
-/// list is complete, because a payer may answer with any of them; the others hold the codes the guide allows in a 271.
-/// Codes are matched as sent, after trimming.
+/// list is the 5010 guide's, because a payer may answer with any of them: checked against the table in CAQH CORE's
+/// Eligibility &amp; Benefits Data Content Rule appendix (vEB.2.1, June 2025), whose 179 codes all match these; the
+/// eight it doesn't list (21, 22, 85, BA, BJ, BM, BP, BQ) are kept from the guide's list. The other lists hold the codes
+/// the guide allows in a 271. Codes are matched as sent, after trimming.
 /// </summary>
 public static class Codes
 {

@@ -29,8 +29,13 @@ ELIG_SHOTS=Screenshots dotnet test --filter Screenshots     # the README's pictu
     AAA reasons and follow-ups, DTP, REF and NM1 qualifiers), `EligibilityModel` (`EligibilityFile`,
     `EligibilityTransaction`, `Party`, `Person`, `Benefit`, `Rejection`, `Inquiry`…; every item keeps the segments
     behind it), `EligibilityReader` (HL levels 20, 21, 22, 23; a person's loop up to its first EQ or EB; 2110 loops;
-    2120 LS…LE), `Words` (each line in plain words, the same everywhere).
+    2120 LS…LE), `Words` (each line in plain words, the same everywhere), `Interpretation` (`Interpreter.Read`: a
+    person's answer made sense of: a `Verdict` (ready, check, act first, rejected, no answer), `Note`s each with what
+    to do and the segments it rests on, and the benefits grouped as a front desk reads them: `CostRow`s, `Accumulator`s,
+    `Limit`s, `Authorization`s, `OtherPayer`s, the PCP, what isn't covered; `Interpreter.Fix` says what to do about
+    each AAA reason).
 - `src/AVAEligibility/`: the window, built in code (`MainWindow.cs`: the list, the Coverage tab and the segments;
+  `MainWindow.Answer.cs`: the reading of an answer, verdict first;
   `MainWindow.Parts.cs`: the hooks later parts fill).
 - `tests/AVAEligibility.Tests/`: xUnit v3 on Avalonia.Headless.
 - `samples/`: an invented clinic's 270, its payers' 271s and its appointment list, from `make_samples.py`; each patient
@@ -45,6 +50,10 @@ ELIG_SHOTS=Screenshots dotnet test --filter Screenshots     # the README's pictu
   got is shown as "code X (not in the list)", never guessed.
 - **A window test that fails leaves its window open, and Avalonia's reset then fails with `fonts:SystemFonts`,** which
   hides the real failure: close windows in `finally`.
+- **The interpretation never guesses.** A note rests on segments the payer sent and says which; what a 271 doesn't
+  say (a copay it didn't send) stays empty. An estimate is labelled an estimate.
+- **Code lists:** the service types were checked against the table in CAQH CORE's Eligibility & Benefits Data Content
+  Rule appendix (vEB.2.1); `ReaderTests` pins their number. Change a list only from a published source.
 - **No real data in the repository.** Every person, payer, member ID and NPI in the samples is invented.
 
 ## Making a change
