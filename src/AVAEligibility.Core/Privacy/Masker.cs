@@ -54,6 +54,7 @@ public sealed class Masker
             Name(a.Last, a.First, a.Middle);
             Add(a.MemberId);
             Add(InquiryBuilder.Clean(a.MemberId));
+            Add(a.Account);
             if (a.IsDependent) Name(a.SubscriberName.Last, a.SubscriberName.First, "");
         }
         _tokens = [.. values.OrderByDescending(kv => kv.Key.Length).Select(kv => (new Regex($@"(?<![A-Za-z0-9]){Regex.Escape(kv.Key)}(?![A-Za-z0-9])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant), kv.Value ? "(address hidden)" : Shape(kv.Key)))];

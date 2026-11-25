@@ -273,6 +273,7 @@ public sealed partial class EligibilityTools(IExplorerHost host)
                     ["visit"] = Handle(a), ["date"] = a.Date?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), ["time"] = a.Time, ["patient"] = a.SortName,
                     ["payer"] = a.SelfPay ? "self-pay" : a.Payer, ["member_id"] = a.MemberId.Length > 0 ? a.MemberId : null, ["dependent_of"] = a.IsDependent ? a.Subscriber : null,
                     ["visit_type"] = a.Visit, ["procedure"] = a.Procedure, ["charge"] = a.Charge,
+                    ["account"] = a.Account.Length > 0 ? a.Account : null, ["denied"] = a.Denied ? a.Denial : null,
                     ["asks"] = a.SelfPay ? null : string.Join(", ", ServiceTypes.For(a.Procedure).Select(t => $"{t} {Codes.ServiceType.Say(t)}")),
                     ["checks"] = Strings(checks.Where(c => c.Appointment == a).Select(c => $"{c.Level.ToString().ToLowerInvariant()}: {c.Text}")),
                 })]),
@@ -341,6 +342,7 @@ public sealed partial class EligibilityTools(IExplorerHost host)
                     {
                         ["visit"] = Handle(w.Appointment), ["day"] = w.Appointment.Date is { } d && first is { } f ? d.DayNumber - f.DayNumber + 1 : null, ["time"] = w.Appointment.Time,
                         ["patient"] = w.Appointment.SortName, ["payer"] = w.Appointment.SelfPay ? "self-pay" : w.Appointment.Payer, ["visit_type"] = $"{w.Appointment.Visit} {w.Appointment.Procedure}",
+                        ["denied"] = w.Appointment.Denied ? w.Appointment.Denial : null,
                         ["verdict"] = w.Word, ["says"] = w.Headline, ["do"] = w.Verdict == Verdict.Ready ? null : decider?.Fix,
                         ["estimate"] = w.Estimate?.Amount, ["answer"] = w.Answer.Person is { } p ? Handle(s, p) : null,
                     };
@@ -362,6 +364,8 @@ public sealed partial class EligibilityTools(IExplorerHost host)
                 ["visit"] = Handle(a), ["patient"] = a.SortName, ["date"] = a.Date?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), ["time"] = a.Time,
                 ["payer"] = a.SelfPay ? "self-pay" : a.Payer, ["provider"] = a.Provider, ["visit_type"] = a.Visit, ["procedure"] = a.Procedure,
                 ["care"] = w.Care is { } c ? $"{c} {Codes.ServiceType.Say(c)}" : null, ["charge"] = a.Charge,
+                ["account"] = a.Account.Length > 0 ? a.Account : null,
+                ["denied"] = a.Denied ? new JsonObject { ["denial"] = a.Denial, ["note"] = "A denied claim asked about again: the date is the date of service, and the first note says what the 271 means for the denial." } : null,
                 ["verdict"] = w.Word, ["headline"] = w.Headline, ["notes"] = Notes(w.Notes),
                 ["answer"] = w.Answer.Person is { } p ? Handle(s, p) : null, ["found_by"] = w.Answer.How.Length > 0 ? w.Answer.How : null,
                 ["estimate"] = w.Estimate is { } e ? new JsonObject { ["amount"] = e.Amount, ["basis"] = e.Basis, ["assumes"] = e.Assumes, ["note"] = "An estimate, not what the payer will decide." } : null,

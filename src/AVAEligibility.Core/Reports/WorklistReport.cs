@@ -34,7 +34,7 @@ public static class WorklistReport
             var a = w.Appointment;
             var css = w.Word.Split(' ')[0];
             b.Append("<tr><td>").Append(H(mask($"{a.Date:yyyy-MM-dd} {a.Time}"))).Append("</td><td>").Append(H(Who(w, mask))).Append("</td><td>")
-             .Append(H(a.SelfPay ? "self-pay" : $"{a.Payer} {mask(a.MemberId)}")).Append("</td><td>").Append(H($"{a.Visit} {a.Procedure}")).Append("</td><td class=\"")
+             .Append(H(a.SelfPay ? "self-pay" : $"{a.Payer} {mask(a.MemberId)}")).Append("</td><td>").Append(H($"{a.Visit} {a.Procedure}" + (a.Denied ? $" ({mask(a.Account)}: {a.Denial})" : ""))).Append("</td><td class=\"")
              .Append(css).Append("\"><b>").Append(H(w.Word)).Append("</b></td><td>");
             foreach (var n in w.Notes.OrderByDescending(n => n.Level))
                 b.Append("<div>").Append(H(mask(n.Text))).Append("<div class=\"fix\">").Append(H(mask(n.Fix))).Append("</div></div>");
@@ -62,7 +62,7 @@ public static class WorklistReport
             sheet.Cell(r, 3).Value = Who(w, mask);
             sheet.Cell(r, 4).Value = a.SelfPay ? "self-pay" : a.Payer;
             sheet.Cell(r, 5).Value = mask(a.MemberId);
-            sheet.Cell(r, 6).Value = a.Visit;
+            sheet.Cell(r, 6).Value = a.Denied ? $"{a.Visit} ({mask(a.Account)}: {a.Denial})" : a.Visit;
             sheet.Cell(r, 7).Value = a.Procedure;
             sheet.Cell(r, 8).Value = w.Word;
             sheet.Cell(r, 9).Value = string.Join(" ", w.Notes.OrderByDescending(n => n.Level).Select(n => mask(n.Text)));

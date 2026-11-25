@@ -70,6 +70,24 @@ public sealed class Screenshots
     });
 
     [Fact]
+    public void Denied() => HeadlessApp.Run(() =>
+    {
+        if (Folder() is not { } dir) return;
+        var folder = Samples.Copy();
+        var w = new MainWindow { Width = 1500, Height = 760, Now = () => InquiryTests.SampleTime };
+        w.AgentSettings.ChatOpen = false;
+        w.Show();
+        if (w.ChatHolder.IsVisible) w.ToggleChat();
+        try
+        {
+            w.Open(Path.Combine(folder, "denied"));
+            w.Tabs.SelectedIndex = 2;
+            Save(w, Path.Combine(dir, "denied.png"));
+        }
+        finally { w.Close(); }
+    });
+
+    [Fact]
     public void Ai_chat() => HeadlessApp.Run(() =>
     {
         if (Folder() is not { } dir) return;

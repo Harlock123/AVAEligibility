@@ -89,6 +89,24 @@ that started or ended.
 
 **View › Export the Worklist** writes it as an HTML page or an Excel workbook.
 
+### Denied claims, asked about again
+
+[AVA Remittance](https://github.com/Harlock123/AVARemittance) (1.1 and later) sends back the claims a payer denied
+for coverage (another payer first, CO-22; not covered on the dates, CO-26 and CO-27; the patient not found, CO-31) as
+an appointment list with two more columns, **Account** and **Denial**, and opens it here. The visit date is the date of
+service, so the 270 asks about that day. The worklist then reads each answer for the denial, not for a visit to come:
+
+- **it agrees**: coverage had ended, or hadn't begun, on the date: bill the plan that covered the patient then, or the
+  patient;
+- **it doesn't**: coverage was active on the date: ask the payer to reprocess the claim, or appeal with the 271;
+- **it shows why**: the payer has the patient under another member ID, name or birth date: correct the claim and send
+  it again;
+- for CO-22, whether the 271 shows another payer as primary.
+
+Visit notes (authorizations, referrals) and estimates are left out: the claim has been sent already.
+
+![Three denied claims read against the payer's 271 for their dates of service](Screenshots/denied.png)
+
 The 271s it saves feed claims too: [AVA Claim Scrubber](https://github.com/Harlock123/AVAClaimScrubber) (1.1 and later)
 checks each claim against the payer's 271 about its patient before it's sent (coverage on the dates, the member found,
 another payer primary, a missing authorization), and its denial replay catches eligibility denials with them.
@@ -146,7 +164,7 @@ AVAEligibility --mcp --http 8779 --root /path/to/files [--token TOKEN] [--cert C
 | `explain_code`, `search_codes` | Any 270/271 code's meaning (and what to do about a rejection); codes by words |
 | `get_appointments`, `check_appointments`, `service_types_for` | The visits and what each asks about; the checks before sending; what a procedure asks about |
 | `write_inquiry` | Writes the 270 (values allowed only) |
-| `get_worklist`, `get_visit`, `estimate`, `compare_answers` | The day's verdicts; a visit in full; what-if estimates; what changed since an earlier answer |
+| `get_worklist`, `get_visit`, `estimate`, `compare_answers` | The day's verdicts (and, for a denied claim asked about again, what the answer means for the denial); a visit in full; what-if estimates; what changed since an earlier answer |
 | `export_worklist` | The worklist report, `.html` or `.xlsx` (masked unless allowed) |
 | `ask_clearinghouse` | Sends the day's questions in real time (the open window only, after the person's yes) |
 | `get_view`, `show_in_view`, `render_view` | What the window shows; select a person or visit there; a picture of an answer or visit |
@@ -170,7 +188,10 @@ AVAEligibility --mcp [--attach] [--root FOLDER] [--real | --mask] [--http [ADDRE
 - `appointments.csv`, thirteen visits over three days;
 - `clinic-270.x12`, exactly what the app writes from that list;
 - the 271s its four payers sent back: a PPO, Medicaid managed care, an HMO, and one whose system was down;
-- `recheck/`, the PPO's answer when asked again two weeks later.
+- `recheck/`, the PPO's answer when asked again two weeks later;
+- `denied/`, AVA Remittance's list of three claims Tallgrass Medicaid denied for coverage (another invented clinic's),
+  and the 271 for their dates of service: coverage ended, a member ID with two digits swapped, and coverage added
+  back-dated to before the visit.
 
 Each patient has one situation planted: full benefits, a dependent, coverage ended, a member ID with a letter O, a
 birth date that doesn't match, Medicare primary, an MRI needing authorization, a visit limit, a PCP elsewhere, a member

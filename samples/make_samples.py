@@ -298,6 +298,45 @@ def answer(payer_id, number):
     return transaction("271", number, body)
 
 
+# ───────────────────────────── denied claims, asked about again ─────────────────────────────
+
+# AVA Remittance's Check Eligibility Again list for three claims Tallgrass Medicaid denied (its samples'
+# recheck/eligibility-recheck.csv, copied as it is: another invented clinic's patients). The visit date is the date of
+# service; the Denial column says why the payer denied the claim.
+DENIED_LIST = """Date,Last name,First name,Birth date,Sex,Payer ID,Payer,Member ID,Subscriber,Provider,Provider NPI,Visit,Procedure,Charge,Account,Denial
+2026-11-03,SANTOS,ISABEL,1979-08-15,F,TGM01,TALLGRASS MEDICAID,TG55089012,self,RIVERBEND FAMILY MEDICINE,1588667638,Denied claim,99213,150.00,RB26118,CO-27: Expenses incurred after coverage terminated.
+2026-11-04,TRAN,VIET,1992-02-03,M,TGM01,TALLGRASS MEDICAID,TG55090123,self,RIVERBEND FAMILY MEDICINE,1588667638,Denied claim,99214,220.00,RB26119,CO-31: Patient cannot be identified as our insured.
+2026-11-05,VEGA,SOFIA,2000-06-27,F,TGM01,TALLGRASS MEDICAID,TG55091234,self,RIVERBEND FAMILY MEDICINE,1588667638,Denied claim,99203,200.00,RB26120,CO-26: Expenses incurred prior to coverage.
+"""
+
+# Tallgrass's 271 to the 270 for those dates: Isabel's coverage ended before her visit (the denial stands), Viet is
+# found under a member ID with two digits the other way round (why the claim didn't match), and Sofia's coverage was
+# added after the claim, back-dated to before her visit (the denial is wrong: reprocess or appeal).
+DENIED_TRACES = {"SANTOS": "TG0001", "TRAN": "TG0002", "VEGA": "TG0003"}
+
+
+def denied_271():
+    payer = "TALLGRASS MEDICAID"
+    body = [seg("BHT", "0022", "11", "RTGM010001", ASKED, ANSWERED_TIME),
+            seg("HL", 1, "", 20, 1), seg("NM1", "PR", 2, payer, "", "", "", "", "PI", "TGM01"),
+            seg("HL", 2, 1, 21, 1), seg("NM1", "1P", 2, "RIVERBEND FAMILY MEDICINE", "", "", "", "", "XX", "1588667638")]
+    people = [
+        ("SANTOS", [seg("NM1", "IL", 1, "SANTOS", "ISABEL", "", "", "", "MI", "TG55089012"), seg("DMG", "D8", "19790815", "F"),
+                    seg("DTP", "356", "D8", "20250601"), seg("DTP", "357", "D8", "20261031"),
+                    eb(6, "IND", 30, "MC", "TALLGRASS MEDICAID PLUS"), seg("MSG", "ELIGIBILITY ENDED 10/31/2026")]),
+        ("TRAN", [seg("NM1", "IL", 1, "TRAN", "VIET", "", "", "", "MI", "TG55090132"), seg("DMG", "D8", "19920203", "M"),
+                  seg("DTP", "356", "D8", "20260101"),
+                  eb(1, "IND", 30, "MC", "TALLGRASS MEDICAID PLUS"), eb("B", "IND", 98, "MC", "", 27, "4", "", "", "", "", "Y")]),
+        ("VEGA", [seg("NM1", "IL", 1, "VEGA", "SOFIA", "", "", "", "MI", "TG55091234"), seg("DMG", "D8", "20000627", "F"),
+                  seg("DTP", "356", "D8", "20261101"),
+                  eb(1, "IND", 30, "MC", "TALLGRASS MEDICAID PLUS"), seg("MSG", "ELIGIBILITY ADDED 11/12/2026, RETROACTIVE TO 11/01/2026")]),
+    ]
+    for n, (last, segs) in enumerate(people):
+        body.append(seg("HL", n + 3, 2, 22, 0))
+        body += [seg("TRN", 2, DENIED_TRACES[last], "9RIVERBND1")] + segs
+    return wrap(5201, "HB", "TGM01X", "RIVERBEND", [transaction("271", 1, body)])
+
+
 def main():
     os.chdir(HERE)
     with open("clinic-270.x12", "w", newline="\n") as f:
@@ -308,6 +347,11 @@ def main():
     os.makedirs("recheck", exist_ok=True)
     with open(os.path.join("recheck", "bluewater-271-dec15.x12"), "w", newline="\n") as f:
         f.write(recheck())
+    os.makedirs("denied", exist_ok=True)
+    with open(os.path.join("denied", "eligibility-recheck.csv"), "w", newline="") as f:
+        f.write(DENIED_LIST)
+    with open(os.path.join("denied", "tallgrass-271.x12"), "w", newline="\n") as f:
+        f.write(denied_271())
     with open("appointments.csv", "w", newline="") as f:
         w = csv.writer(f, lineterminator="\n")
         w.writerow(["Date", "Time", "Last name", "First name", "Middle", "Birth date", "Sex", "Payer ID", "Payer", "Member ID", "Subscriber", "Provider", "Provider NPI", "Visit", "Procedure", "Charge"])

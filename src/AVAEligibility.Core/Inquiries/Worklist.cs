@@ -58,7 +58,9 @@ public static class Worklist
         }
         if (answer.Person is not { } p)
         {
-            notes.Add(new Note(Verdict.NoAnswer, "No answer yet.", "Send the 270 for this list (Write the 270), then open the payers' 271s.", []));
+            notes.Add(new Note(Verdict.NoAnswer, "No answer yet.", a.Denied
+                ? "Send the 270 for this list (Write the 270, or Ask Now): it asks about the date of service, then open the payer's 271."
+                : "Send the 270 for this list (Write the 270), then open the payers' 271s.", []));
             return new WorkItem(a, answer, null, Verdict.NoAnswer, notes, null);
         }
 
@@ -67,10 +69,11 @@ public static class Worklist
         if (reading.Verdict is not (Verdict.Rejected or Verdict.NoAnswer))
         {
             Mismatches(a, p, notes);
-            ForTheVisit(a, reading, notes);
+            if (a.Denied) AfterDenial(a, reading, notes);
+            else ForTheVisit(a, reading, notes);
         }
         var verdict = notes.Count == 0 ? Verdict.Ready : notes.Max(n => n.Level);
-        return new WorkItem(a, answer, reading, verdict, notes, verdict is Verdict.Rejected or Verdict.NoAnswer ? null : Estimate(a, reading));
+        return new WorkItem(a, answer, reading, verdict, notes, verdict is Verdict.Rejected or Verdict.NoAnswer || a.Denied ? null : Estimate(a, reading));
     }
 
     /// <summary>Where the payer has the patient differently from the registration: claims would be rejected for it.</summary>
@@ -115,6 +118,67 @@ public static class Worklist
                 gatekeeper ? $"Get a referral from {pcp.Name}'s office before the visit" + string.Concat(pcp.Contacts.SelectMany(c => c.Numbers).Where(n => n.Kind == "TE").Take(1).Select(n => $" ({Interpreter.Phone(n.Number)})")) + ", or change the patient's PCP with the plan."
                            : "Check whether the plan needs a referral.", pcpBenefit.Segments));
         }
+    }
+
+    /// <summary>What a denial's codes said, in a few words for a sentence.</summary>
+    private static string Said(string reason) => reason switch
+    {
+        "22" => "another payer's to pay first",
+        "26" => "before coverage began",
+        "27" => "after coverage ended",
+        "31" => "not the payer's member",
+        _ => $"reason {reason}",
+    };
+
+    /// <summary>
+    /// A denied claim asked about again: what the payer's 271 for the date of service says about the denial. It agrees
+    /// (coverage wasn't active then, another payer is primary), or it doesn't (coverage was active: ask the payer to
+    /// reprocess, or appeal with the 271), or it shows why the payer couldn't match the claim (its member ID, name or
+    /// birth date differ). Goes first among the notes, so it's the headline. Visit notes (authorizations, referrals,
+    /// estimates) don't apply to a claim already sent.
+    /// </summary>
+    private static void AfterDenial(Appointment a, Interpretation r, List<Note> notes)
+    {
+        var p = r.Person;
+        var codes = a.DenialCodes;
+        var named = codes.Count > 0 ? string.Join(", ", codes.Select(c => $"{c.Group}-{c.Reason}")) : "the denial";
+        var reasons = codes.Select(c => c.Reason).ToHashSet();
+        var day = a.Date;
+        var on = day is { } d ? $" on {d:yyyy-MM-dd}" : "";
+        var coverage = p.Benefits.Where(b => b.ServiceTypes.Count == 0 || b.ServiceTypes.Contains("30")).Where(b => b.Information is "1" or "2" or "3" or "4" or "5" or "6" or "7" or "8")
+            .SelectMany(b => b.Segments).Concat(p.Dates.Select(x => x.Segment)).Distinct().ToList();
+        var notActive = r.Active == false || day is { } v && (r.Ends is { } end && v > end || r.Begins is { } begin && v < begin);
+        var primary = r.OtherPayers.FirstOrDefault(o => o.Order == "Primary");
+        var differs = new List<string>();
+        if (!a.IsDependent && p.MemberId.Length > 0 && !p.MemberId.Equals(InquiryBuilder.Clean(a.MemberId), StringComparison.OrdinalIgnoreCase)) differs.Add($"member ID {p.MemberId} (the claim had {a.MemberId})");
+        if (!p.Last.Equals(a.Last, StringComparison.OrdinalIgnoreCase) || p.First.Length > 0 && !p.First.Equals(a.First, StringComparison.OrdinalIgnoreCase)) differs.Add($"the name {p.SortName} (the claim had {a.SortName})");
+        if (p.BirthDate is { } born && a.BirthDate is { } ours && born != ours) differs.Add($"the birth date {born:yyyy-MM-dd} (the claim had {ours:yyyy-MM-dd})");
+
+        Note note;
+        if (notActive)
+        {
+            var when = r.Active == false ? r.Ends is { } e ? $"coverage ended {e:yyyy-MM-dd}" : "coverage isn't active"
+                : r.Ends is { } e2 && day > e2 ? $"coverage ended {e2:yyyy-MM-dd}" : $"coverage began {r.Begins:yyyy-MM-dd}";
+            note = new Note(Verdict.Act, $"The 271 agrees with the denial ({named}): {when}, so the plan didn't cover the claim{on}.",
+                "Ask the patient which plan covered them" + (on.Length > 0 ? on : " then") + " and bill it" + (r.OtherPayers.Count > 0 ? $" (the 271 names {string.Join(", ", r.OtherPayers.Select(o => o.ToString()))})" : "") + "; with none, bill the patient.",
+                coverage);
+        }
+        else if (reasons.Contains("22") && primary != null)
+            note = new Note(Verdict.Act, $"The 271 agrees with the denial ({named}): {primary.Name} is primary.", $"Bill {primary.Name} first, then this plan with its remittance.", primary.Segments);
+        else if (r.Active != true)
+            note = new Note(Verdict.Check, $"The 271 doesn't say whether coverage was active{on}, so it neither confirms nor answers the denial ({named}).", "Call the payer about the claim, with the date of service.", coverage);
+        else if (differs.Count > 0)
+            note = new Note(Verdict.Act, $"The payer finds the patient with {string.Join(", ", differs)}: why it couldn't match the claim ({named}).",
+                "Correct the claim to the payer's details and send it again as a replacement claim (frequency 7), and correct the registration.", [.. p.Segments.Where(x => x.Id is "NM1" or "DMG").Take(2)]);
+        else if (reasons.Contains("22"))
+            note = new Note(Verdict.Act, $"The 271 shows no other payer ahead of this plan{on}, yet the claim was denied as {Said("22")} ({named}).",
+                "Ask the payer to update the patient's coordination of benefits (the patient may need to tell it there's no other coverage), then to reprocess the claim.", coverage);
+        else
+            note = new Note(Verdict.Act, $"The 271 says coverage was active{on}" + (r.Begins is { } b ? $" (from {b:yyyy-MM-dd})" : "") + $", yet the claim was denied as {string.Join(" and ", reasons.Select(Said).DefaultIfEmpty("not covered"))} ({named}).",
+                "Ask the payer to reprocess the claim, or appeal with this 271: it's the payer's own answer for the date of service. Keep its date and trace number.", coverage);
+        notes.Insert(0, note);
+        // Notes written for a visit still to come ("before the visit") are about the past here: the denial's note says what to do.
+        notes.RemoveAll(n => n != note && n.Fix.Contains("before the visit", StringComparison.Ordinal));
     }
 
     /// <summary>"PATEL, ANJALI" as ANJALI PATEL, as names in a 271 read.</summary>

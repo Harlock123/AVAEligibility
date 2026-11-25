@@ -201,4 +201,23 @@ public sealed class SendingWindowTests
             w.Close();
         }
     });
+
+    [Fact]
+    public void A_denied_claims_list_from_AVA_Remittance_says_what_the_271_means_for_each_denial() => HeadlessApp.Run(() =>
+    {
+        var folder = Samples.Copy();
+        var w = new MainWindow { Now = () => InquiryTests.SampleTime };
+        w.Show();
+        try
+        {
+            w.Open(Path.Combine(folder, "denied"));
+            Assert.Equal(3, w.Work.Count);
+            Assert.All(w.Work, x => Assert.Equal("act first", x.Word));
+            var texts = w.WorklistPanel.GetLogicalDescendants().OfType<Avalonia.Controls.TextBlock>().Select(t => t.Text ?? "").ToList();
+            Assert.Contains("Denied (RB26120): CO-26: Expenses incurred prior to coverage.", texts);
+            Assert.Contains("The 271 says coverage was active on 2026-11-05 (from 2026-11-01), yet the claim was denied as before coverage began (CO-26).", texts);
+            Assert.Contains("TUESDAY 3 NOVEMBER 2026", texts);
+        }
+        finally { w.Close(); }
+    });
 }

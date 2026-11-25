@@ -59,7 +59,10 @@ public sealed partial class MainWindow
             WorklistPanel.Children.Add(Dim("Open an appointment list and the payers' 271s: each visit then shows whether it's ready, what to do first, and what the patient may owe."));
             return;
         }
-        WorklistPanel.Children.Add(Dim($"{System.IO.Path.GetFileName(_appointmentsPath)} against {_open.Count(f => f.Transactions.Any(t => t.IsResponse))} answer file(s). Estimates are estimates."));
+        var answerFiles = _open.Count(f => f.Transactions.Any(t => t.IsResponse));
+        WorklistPanel.Children.Add(Dim(_work.All(w => w.Appointment.Denied)
+            ? $"{System.IO.Path.GetFileName(_appointmentsPath)}: denied claims, each answer read for its denial, against {answerFiles} answer file(s)."
+            : $"{System.IO.Path.GetFileName(_appointmentsPath)} against {answerFiles} answer file(s). Estimates are estimates."));
         var counts = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 18, Margin = new Thickness(0, 8, 0, 4) };
         foreach (var g in _work.GroupBy(w => w.Word).OrderBy(g => g.Min(w => (int)w.Verdict)))
             counts.Children.Add(new TextBlock { Text = $"{g.Count()} {g.Key}", Foreground = BrushOf(g.First().Verdict), FontWeight = FontWeight.SemiBold });
@@ -91,6 +94,7 @@ public sealed partial class MainWindow
         var fix = w.Notes.Where(n => n.Level == w.Verdict).Select(n => n.Fix).FirstOrDefault();
         if (fix is { Length: > 0 } && w.Verdict != Verdict.Ready) what.Children.Add(new TextBlock { Text = fix, Foreground = Look.Dim, TextWrapping = TextWrapping.Wrap });
         what.Children.Add(new TextBlock { Text = $"{(a.SelfPay ? "self-pay" : a.Payer)} · {a.Visit} {a.Procedure}", Foreground = Look.Gutter, FontSize = 12 });
+        if (a.Denied) what.Children.Add(new TextBlock { Text = $"Denied{(a.Account.Length > 0 ? $" ({a.Account})" : "")}: {a.Denial}", Foreground = Look.Gutter, FontSize = 12, TextWrapping = TextWrapping.Wrap });
         Put(what, 3);
         Put(new TextBlock { Text = w.Estimate is { } e ? Words.Money(e.Amount) : "", Foreground = Look.Accent, HorizontalAlignment = HorizontalAlignment.Right }, 4);
         var border = new Border { Child = grid, Padding = new Thickness(6, 5), Background = Brushes.Transparent, BorderBrush = Look.Border, BorderThickness = new Thickness(0, 0, 0, 1) };

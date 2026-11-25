@@ -243,8 +243,9 @@ public sealed class AgentTests
             foreach (var s in p.Segments.Where(s => s.Id == "N3")) phi.Add(s[1]);
             foreach (var r in p.Benefits.SelectMany(b => b.References)) phi.Add(r.Value);
         }
-        foreach (var a in AppointmentList.Load(Samples.Path("appointments.csv")))
+        foreach (var a in AppointmentList.Load(Samples.Path("appointments.csv")).Concat(AppointmentList.Load(Samples.Path("denied/eligibility-recheck.csv"))))
         {
+            if (a.Account.Length > 0) phi.Add(a.Account);
             phi.Add(a.MemberId is { Length: > 0 } m ? m : "-");
             if (a.BirthDate is { } b) phi.Add(b.ToString("yyyy-MM-dd"));
             if (a.Date is { } d) { phi.Add(d.ToString("yyyy-MM-dd")); phi.Add(d.ToString("yyyyMMdd")); }
@@ -257,7 +258,7 @@ public sealed class AgentTests
     public void The_list_of_details_the_no_leak_test_looks_for_covers_every_kind()
     {
         var phi = Phi();
-        foreach (var real in new[] { "HARTWELL", "KOWALCZYK", "BWH40010O512", "SMH5512001", "1971-03-14", "19650218", "100 OAK ST", "4TQ8NJ2KR63", "2026-12-02", "VANTERPOOL" }) Assert.Contains(real, phi);
+        foreach (var real in new[] { "HARTWELL", "KOWALCZYK", "BWH40010O512", "SMH5512001", "1971-03-14", "19650218", "100 OAK ST", "4TQ8NJ2KR63", "2026-12-02", "VANTERPOOL", "RB26119", "TG55090123", "TG55090132", "2026-11-04", "SANTOS" }) Assert.Contains(real, phi);
         Assert.True(phi.Count > 60, $"{phi.Count}");
     }
 
@@ -305,9 +306,27 @@ public sealed class AgentTests
         Check("checkpoint", new { name = "x" });
         Check("diff", new { since = "x" });
 
-        var html = File.ReadAllText(Path.Combine(rig.Root, "leak", "worklist.html"));
+        // A denied claims list from AVA Remittance, and the 271 for the dates of service.
+        Check("open_file", new { file = "denied/eligibility-recheck.csv" });
+        Check("open_file", new { file = "denied/tallgrass-271.x12" });
+        Check("get_appointments");
+        Check("check_appointments");
+        Check("get_worklist");
+        Assert.Equal(3, rig.Session.Work.Count(w => w.Appointment.Denied));
+        foreach (var w in rig.Session.Work)
+        {
+            var v = EligibilityTools.Handle(w.Appointment);
+            Check("get_visit", new { visit = v });
+            Check("render_view", new { handle = v });
+        }
+        foreach (var h in rig.Ok("list_people").GetProperty("people").EnumerateArray().Select(p => p.GetProperty("person").GetString()!)) Check("get_answer", new { person = h });
+        Check("export_worklist", new { output = "leak/denied.html" });
+        Check("export_worklist", new { output = "leak/denied.xlsx" });
+
+        var html = File.ReadAllText(Path.Combine(rig.Root, "leak", "worklist.html")) + File.ReadAllText(Path.Combine(rig.Root, "leak", "denied.html"));
         using var book = new ClosedXML.Excel.XLWorkbook(Path.Combine(rig.Root, "leak", "worklist.xlsx"));
-        var xlsx = string.Join("\n", book.Worksheet(1).CellsUsed().Select(c => c.GetFormattedString()));
+        using var denied = new ClosedXML.Excel.XLWorkbook(Path.Combine(rig.Root, "leak", "denied.xlsx"));
+        var xlsx = string.Join("\n", book.Worksheet(1).CellsUsed().Concat(denied.Worksheet(1).CellsUsed()).Select(c => c.GetFormattedString()));
         var words = phi.Select(real => (real, new Regex($"(?<![A-Za-z0-9]){Regex.Escape(real)}(?![A-Za-z0-9])", RegexOptions.IgnoreCase))).ToList();
         var leaks = new List<string>();
         foreach (var (call, text) in seen.Append(("file worklist.html", html)).Append(("file worklist.xlsx", xlsx)))

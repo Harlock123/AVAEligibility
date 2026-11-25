@@ -27,6 +27,21 @@ public sealed record Appointment
     public string Procedure { get; init; } = "";
     public decimal? Charge { get; init; }
 
+    /// <summary>The claim's account number, when the row is a denied claim asked about again.</summary>
+    public string Account { get; init; } = "";
+
+    /// <summary>
+    /// Why the claim was denied, when the row is one asked about again (AVA Remittance's Check Eligibility Again writes
+    /// it: "CO-27: Expenses incurred after coverage terminated."). The visit date is then the date of service, past.
+    /// </summary>
+    public string Denial { get; init; } = "";
+
+    public bool Denied => Denial.Length > 0;
+
+    /// <summary>The denial's adjustment codes (CO-27, OA-22), group and reason, in the order given.</summary>
+    public IReadOnlyList<(string Group, string Reason)> DenialCodes =>
+        [.. System.Text.RegularExpressions.Regex.Matches(Denial, @"\b(CO|OA|PI|PR|CR)-([A-Z0-9]{1,3})\b").Select(m => (m.Groups[1].Value, m.Groups[2].Value)).Distinct()];
+
     /// <summary>What the list had that didn't read (a date that isn't one), by column, so checks can say so.</summary>
     public IReadOnlyList<string> Unread { get; init; } = [];
 
@@ -69,6 +84,8 @@ public static class AppointmentList
         ["visit"] = ["visit", "visit type", "reason", "appointment type"],
         ["procedure"] = ["procedure", "cpt", "procedure code", "code"],
         ["charge"] = ["charge", "fee", "amount"],
+        ["account"] = ["account", "patient account", "account number"],
+        ["denial"] = ["denial", "denied", "denial reason"],
     };
 
     private static readonly string[] DateFormats = ["yyyy-MM-dd", "M/d/yyyy", "MM/dd/yyyy", "yyyyMMdd", "M/d/yy"];
@@ -134,6 +151,8 @@ public static class AppointmentList
                 Visit = Get("visit"),
                 Procedure = Get("procedure").ToUpperInvariant(),
                 Charge = decimal.TryParse(charge.TrimStart('$'), NumberStyles.Number, CultureInfo.InvariantCulture, out var c) ? c : null,
+                Account = Get("account"),
+                Denial = Get("denial"),
                 Unread = unread,
             });
         }

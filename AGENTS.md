@@ -39,14 +39,17 @@ ELIG_SHOTS=Screenshots dotnet test --filter Screenshots     # the README's pictu
     to do and the segments it rests on, and the benefits grouped as a front desk reads them: `CostRow`s, `Accumulator`s,
     `Limit`s, `Authorization`s, `OtherPayer`s, the PCP, what isn't covered; `Interpreter.Fix` says what to do about
     each AAA reason).
-  - `Inquiries/`: `Appointments` (`AppointmentList`: a CSV or Excel schedule read by its headers, in any order),
+  - `Inquiries/`: `Appointments` (`AppointmentList`: a CSV or Excel schedule read by its headers, in any order;
+    Account and Denial when the list is AVA Remittance's Check Eligibility Again),
     `ServiceTypes` (what to ask for a visit: 30, and the care its procedure code falls in), `InquiryBuilder` (the checks
     before sending, then the 270: one transaction per payer, dependents under their subscriber, a trace per
     appointment; `Npi` check digits), `Matcher` (each question's answer: by trace, then by payer, member ID and name;
     a payer that refused the whole batch answers everyone asked of it), `Worklist` (each appointment's `WorkItem`: its
     answer read for the visit's date and care, plus what only the visit tells: its care needs authorization or isn't
     covered, it uses one of a limited number of visits, it's with someone other than the PCP, the payer has the
-    patient's ID, name or birth date differently; and an `Estimate`), `Changes` (what changed between two answers about
+    patient's ID, name or birth date differently; and an `Estimate`; for a denied claim, `AfterDenial` instead of the
+    visit's notes and the estimate: whether the 271 for the date of service agrees with the denial, contradicts it, or
+    shows why the claim didn't match), `Changes` (what changed between two answers about
     the same person).
   - `Reports/WorklistReport.cs`: the worklist as an HTML page or an Excel workbook.
   - `Privacy/Masker.cs`: people's details as agents see them: every name, ID, identifier and address in the open files
@@ -75,7 +78,9 @@ ELIG_SHOTS=Screenshots dotnet test --filter Screenshots     # the README's pictu
   (opt-in), `MockClearinghouse` (the only clearinghouse tests talk to).
 - `samples/`: an invented clinic's 270, its payers' 271s and its appointment list, from `make_samples.py`; each patient
   has one situation planted (see `PATIENTS` there). `recheck/` holds Bluewater's answer when asked again on 15
-  December (kept out of `samples/` itself so opening the folder opens one day's answers).
+  December (kept out of `samples/` itself so opening the folder opens one day's answers). `denied/` holds AVA
+  Remittance's Check Eligibility Again list (a copy of its `samples/recheck/eligibility-recheck.csv`, another invented
+  clinic's patients) and Tallgrass's 271 for their dates of service (see `DENIED_LIST`).
 
 ## Rules that keep it working
 
@@ -96,6 +101,8 @@ ELIG_SHOTS=Screenshots dotnet test --filter Screenshots     # the README's pictu
 - **Nothing is sent without the person.** Sending is off until they turn it on; Ask Now asks first, naming how many
   questions and where; the address must be HTTPS unless it's this computer. Tests send only to `MockClearinghouse`,
   on 127.0.0.1; never add a test that reaches a real clearinghouse. The password never goes in `settings.json`.
+- **AVA Remittance writes the denied list.** `samples/denied/eligibility-recheck.csv` is its output, copied; the
+  columns are shared (fix both apps together), and `DeniedTests` pins what each answer means for its denial.
 - **The samples' 270 is what the app writes.** `InquiryTests` builds it from `appointments.csv` with the samples'
   settings and compares it byte for byte with `clinic-270.x12`: change the builder and `make_samples.py` together.
 - **Waiting on the UI thread:** a window test that awaits work started on the UI thread uses `HeadlessApp.Wait`, which
