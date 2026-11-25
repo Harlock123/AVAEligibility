@@ -1,3 +1,4 @@
+using AVAEligibility.Core.Authorizations;
 using System.ComponentModel;
 using System.Globalization;
 using System.Text.Json.Nodes;
@@ -71,6 +72,7 @@ public sealed partial class EligibilityTools(IExplorerHost host)
         if (AppointmentList.LooksLikeOne(path)) return "appointment list";
         try
         {
+            if (AuthReader.LooksLikeOne(path)) return AuthReader.Load(path).IsResponse ? "278 answer" : "278 request";
             var f = EligibilityReader.Load(path);
             return f.Transactions.Count > 0 ? f.Kind : "X12, not eligibility";
         }
@@ -81,7 +83,7 @@ public sealed partial class EligibilityTools(IExplorerHost host)
     }
 
     [McpServerTool(Name = "open_file", ReadOnly = false, Idempotent = true, Destructive = false, OpenWorld = false)]
-    [Description("Opens a 270, a 271 or an appointment list (CSV or Excel) from the working folder. Opening a list and the payers' 271s makes the worklist.")]
+    [Description("Opens a 270, a 271, a 278 (an authorization request or answer) or an appointment list (CSV or Excel) from the working folder. Opening a list and the payers' 271s makes the worklist; a 278 answer updates the visits it decides.")]
     public Task<string> OpenFile(
         [Description("The file, relative to the working folder.")] string file,
         CancellationToken cancel = default) =>
@@ -91,6 +93,13 @@ public sealed partial class EligibilityTools(IExplorerHost host)
             s.Open(full);
             if (s.AppointmentsPath == full)
                 return new JsonObject { ["opened"] = _files.Relative(full), ["kind"] = "appointment list", ["visits"] = s.Appointments.Count, ["worklist"] = Counts(s.Work) };
+            if (s.Reviews.FirstOrDefault(x => x.Path == full) is { } auth)
+                return new JsonObject
+                {
+                    ["opened"] = _files.Relative(full), ["kind"] = auth.IsResponse ? "278 answer" : "278 request",
+                    ["reviews"] = new JsonArray([.. auth.Reviews.Select(r => (JsonNode)new JsonObject { ["patient"] = r.SortName, ["reviewer"] = r.UmoName, ["decision"] = r.Word })]),
+                    ["problems"] = auth.Problems.Count > 0 ? new JsonArray([.. auth.Problems.Select(x => (JsonNode)x)]) : null,
+                };
             var f = s.Files.First(x => x.Path == full);
             return new JsonObject
             {
@@ -121,8 +130,61 @@ public sealed partial class EligibilityTools(IExplorerHost host)
             {
                 ["file"] = f.Path is { } p ? _files.Relative(p) : f.Name, ["kind"] = f.Kind, ["payers"] = string.Join(", ", f.Transactions.Select(t => t.Payer?.Name).Distinct()), ["people"] = f.People.Count(),
             })]),
+            ["authorizations"] = s.Reviews.Count > 0 ? new JsonArray([.. s.Reviews.Select(f => (JsonNode)new JsonObject
+            {
+                ["file"] = f.Path is { } p ? _files.Relative(p) : f.Name, ["kind"] = f.IsResponse ? "278 answer" : "278 request", ["reviews"] = f.Reviews.Count,
+            })]) : null,
             ["appointment_list"] = s.AppointmentsPath is { } a ? _files.Relative(a) : null,
             ["visits"] = s.Appointments.Count,
+        }, cancel);
+
+    // ───────────────────────────── authorizations (278) ─────────────────────────────
+
+    [McpServerTool(Name = "get_authorizations", ReadOnly = true, Idempotent = true, Destructive = false, OpenWorld = false)]
+    [Description("The visits whose care the payers' 271s say needs authorization, each with who reviews it and their phone, the checks before a 278 (a diagnosis is needed), and its 278: not asked, asked and waiting, or the decision (certified with the number to put on the claim and the dates it runs, partly certified, pended, not certified, contact the payer, not needed, or refused), with what to do.")]
+    public Task<string> GetAuthorizations(CancellationToken cancel = default) =>
+        Session("read the authorizations", s =>
+        {
+            if (s.Appointments.Count == 0) throw new InvalidOperationException("No appointment list is open: open_file opens one, then the payers' 271s.");
+            var needs = AuthRequests.Needed(s.Work);
+            var checks = AuthRequests.Check(needs);
+            return new JsonObject
+            {
+                ["visits"] = new JsonArray([.. needs.Select(n =>
+                {
+                    var r = AuthRequests.For(n.Appointment, s.Reviews);
+                    var note = r != null ? AuthRequests.Read(r, n) : null;
+                    return (JsonNode)new JsonObject
+                    {
+                        ["visit"] = Handle(n.Appointment), ["patient"] = n.Appointment.SortName, ["date"] = n.Appointment.Date?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                        ["procedure"] = n.Appointment.Procedure, ["care"] = $"{n.Care} {Codes.ServiceType.Say(n.Care)}", ["diagnosis"] = n.Appointment.Diagnosis.Length > 0 ? n.Appointment.Diagnosis : null,
+                        ["reviewer"] = n.UmoName, ["phone"] = n.UmoPhone.Length > 0 ? Interpreter.Phone(n.UmoPhone) : null,
+                        ["status"] = r?.Word ?? "not asked",
+                        ["says"] = note?.Text, ["do"] = note?.Fix ?? "Write the 278 (write_auth_request, with values allowed; or the person's Write the 278) or call the reviewer.",
+                        ["number"] = r is { IsResponse: true, Number.Length: > 0 } ? r.Number : null, ["runs"] = r is { Runs.Length: > 0 } ? r.Runs : null,
+                        ["decision"] = r is { IsResponse: true, Action.Length: > 0 } ? AuthCodes.Say(AuthCodes.Action, r.Action) : null,
+                        ["checks"] = Strings(checks.Where(c => c.Appointment == n.Appointment).Select(c => $"{c.Level.ToString().ToLowerInvariant()}: {c.Text}")),
+                    };
+                })]),
+                ["note"] = needs.Count == 0 ? "No visit on the worklist needs authorization (or the 271s aren't open)." : "Payers support the 278 unevenly: where one takes it only by phone or portal, use the reviewer's number.",
+            };
+        }, cancel);
+
+    [McpServerTool(Name = "write_auth_request", ReadOnly = false, Idempotent = false, Destructive = false, OpenWorld = false)]
+    [Description("Writes the 278 authorization requests (005010X217) for the visits needing authorization that no open 278 answers, as a new .x12 file in the working folder, with the inquiry settings (one transaction per visit; visits with errors, such as no diagnosis, are left out), and opens it. It holds people's details, so it needs the person to allow values. Nothing is sent.")]
+    public Task<string> WriteAuthRequest(
+        [Description("The new .x12 file, relative to the working folder.")] string output,
+        CancellationToken cancel = default) =>
+        Write("wrote a 278", output, "A 278", [".x12", ".edi", ".txt"], (s, full) =>
+        {
+            if (!s.SeeRealValues) throw new InvalidOperationException("A 278 holds people's names, birth dates and member IDs, and agents see values masked here: the person writes it (File › Write the 278 for Authorizations), or lets agents see values (AI menu).");
+            var needs = AuthRequests.Needed(s.Work).Where(n => AuthRequests.For(n.Appointment, s.Reviews) is not { IsResponse: true }).ToList();
+            if (needs.Count == 0) throw new InvalidOperationException("No visit needs a 278: none needs authorization, or each has its answer open.");
+            var built = AuthRequests.Build(needs, s.Inquiry, s.Now);
+            File.WriteAllText(full, built.Text);
+            s.WroteAuth();
+            s.Open(full);
+            return new JsonObject { ["requests"] = built.Transactions, ["left_out"] = built.Checks.Where(c => c.Level == CheckLevel.Error).Select(c => c.Appointment).Distinct().Count() };
         }, cancel);
 
     // ───────────────────────────── people and answers ─────────────────────────────
@@ -416,7 +478,7 @@ public sealed partial class EligibilityTools(IExplorerHost host)
         Write("exported the worklist", output, "A worklist", [".html", ".htm", ".xlsx"], (s, full) =>
         {
             if (s.Appointments.Count == 0) throw new InvalidOperationException("No appointment list is open: open_file opens one.");
-            Func<string, string>? mask = s.SeeRealValues ? null : new Masker(s.Files, s.Appointments).Text;
+            Func<string, string>? mask = s.SeeRealValues ? null : new Masker(s.Files, s.Appointments, s.Reviews).Text;
             if (full.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase)) WorklistReport.Excel(full, s.Work, mask);
             else File.WriteAllText(full, WorklistReport.Html(s.Work, "Worklist", s.Now, mask));
             return new JsonObject { ["visits"] = s.Work.Count };
@@ -435,7 +497,7 @@ public sealed partial class EligibilityTools(IExplorerHost host)
 
     // ───────────────────────────── the view ─────────────────────────────
 
-    private static readonly string[] Tabs = ["coverage", "inquiries", "worklist"];
+    private static readonly string[] Tabs = ["coverage", "inquiries", "worklist", "authorizations"];
 
     [McpServerTool(Name = "get_view", ReadOnly = true, Idempotent = true, Destructive = false, OpenWorld = false)]
     [Description("What the window shows: the tab, and the person or visit selected.")]
@@ -443,15 +505,15 @@ public sealed partial class EligibilityTools(IExplorerHost host)
         Session("looked at the view", s => new JsonObject { ["tab"] = s.View.Tab, ["selected"] = s.View.Handle, ["live"] = host.Live }, cancel);
 
     [McpServerTool(Name = "show_in_view", ReadOnly = false, Idempotent = true, Destructive = false, OpenWorld = false)]
-    [Description("Shows the person something in their window: a person's answer (P01) or a visit (V01) on the coverage tab, or the inquiries or worklist tab. Headless, it only remembers it (render_view draws it).")]
+    [Description("Shows the person something in their window: a person's answer (P01) or a visit (V01) on the coverage tab, or the inquiries, worklist or authorizations tab. Headless, it only remembers it (render_view draws it).")]
     public Task<string> ShowInView(
         [Description("A person (P01) or a visit (V01). Optional.")] string? handle = null,
-        [Description("coverage, inquiries or worklist. Default coverage.")] string tab = "coverage",
+        [Description("coverage, inquiries, worklist or authorizations. Default coverage.")] string tab = "coverage",
         CancellationToken cancel = default) =>
         Session("showed something", s =>
         {
             var t = tab.Trim().ToLowerInvariant();
-            if (!Tabs.Contains(t)) throw new ArgumentException("tab is coverage, inquiries or worklist.");
+            if (!Tabs.Contains(t)) throw new ArgumentException("tab is coverage, inquiries, worklist or authorizations.");
             var h = handle?.Trim().ToUpperInvariant();
             if (h != null) _ = h.StartsWith('V') ? VisitOf(s, h).Appointment : (object)PersonOf(s, h);
             s.Show(new ViewState(t, h));
@@ -480,7 +542,7 @@ public sealed partial class EligibilityTools(IExplorerHost host)
 
     internal ViewPicture PictureOf(IExplorerSession s, ViewState view)
     {
-        var mask = s.SeeRealValues ? (Func<string, string>)(x => x) : new Masker(s.Files, s.Appointments).Text;
+        var mask = s.SeeRealValues ? (Func<string, string>)(x => x) : new Masker(s.Files, s.Appointments, s.Reviews).Text;
         ViewPicture Masked(string title, string sub, IEnumerable<string> lines, IEnumerable<string> notes) =>
             new(mask(title), mask(sub), [.. lines.Select(mask)], 1, 0, 0, false, [.. notes.Select(mask)]);
         if (view.Handle is { } h && h.StartsWith('V'))
@@ -506,7 +568,7 @@ public sealed partial class EligibilityTools(IExplorerHost host)
     /// <summary>Every string in an answer masked (unless values are allowed), and "values_masked" added.</summary>
     private static string Finish(IExplorerSession s, JsonObject o)
     {
-        if (!s.SeeRealValues) MaskStrings(o, new Masker(s.Files, s.Appointments));
+        if (!s.SeeRealValues) MaskStrings(o, new Masker(s.Files, s.Appointments, s.Reviews));
         o["values_masked"] = !s.SeeRealValues;
         return o.ToJsonString(Json.Options);
     }

@@ -21,7 +21,7 @@ public sealed class Masker
 
     private readonly List<(Regex Pattern, string Masked)> _tokens;
 
-    public Masker(IEnumerable<EligibilityFile> files, IEnumerable<Appointment> appointments)
+    public Masker(IEnumerable<EligibilityFile> files, IEnumerable<Appointment> appointments, IEnumerable<Authorizations.AuthFile>? reviews = null)
     {
         var values = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase); // value → hidden entirely (an address)
         void Add(string? v, bool hide = false)
@@ -48,6 +48,14 @@ public sealed class Masker
                 foreach (var s in p.Segments.Where(s => s.Id is "N3" or "N4"))
                     for (var i = 1; i < s.Elements.Length; i++) Add(s[i], true);
             }
+        }
+        foreach (var r in (reviews ?? []).SelectMany(f => f.Reviews))
+        {
+            Name(r.Last, r.First, "");
+            Name(r.PatientLast, r.PatientFirst, "");
+            Add(r.MemberId);
+            Add(r.Number);
+            foreach (var x in r.Services) Add(x.Number);
         }
         foreach (var a in appointments)
         {

@@ -11,6 +11,8 @@ internal sealed class WindowSession(MainWindow window) : IExplorerSession
     public ViewState View => window.CurrentView;
     public bool SeeRealValues => window.AgentsSeeRealValues;
     public IReadOnlyList<EligibilityFile> Files => window.OpenFiles;
+    public IReadOnlyList<Core.Authorizations.AuthFile> Reviews => window.Reviews;
+    public void WroteAuth() => window.WroteAuthForAgent();
     public IReadOnlyList<Appointment> Appointments => window.Appointments;
     public string? AppointmentsPath => window.AppointmentsPath;
     public IReadOnlyDictionary<Appointment, string>? Traces => window.LastBuilt?.Traces;

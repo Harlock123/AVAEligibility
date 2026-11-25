@@ -47,6 +47,7 @@ public sealed partial class MainWindow
     private partial IEnumerable<object> MoreFileItems(Func<string, Action, Key?, KeyModifiers, MenuItem> item) =>
     [
         item("_Write the 270…", () => _ = WriteInquiry(), Key.S, KeyModifiers.Control | KeyModifiers.Shift),
+        item("Write the 27_8 for Authorizations…", () => _ = WriteAuth(), null, KeyModifiers.None),
         new Separator(),
     ];
 

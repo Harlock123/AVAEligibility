@@ -16,6 +16,8 @@ It also estimates what the patient may owe.
 It starts from the clinic's **appointment list**. It checks each row before anything is sent (a letter O among a
 member ID's digits is caught before the payer rejects it), writes the **270**, and matches each **271** back to its
 question. It can also ask a clearinghouse in real time over **CAQH CORE** connectivity, off until you set it up.
+When a visit's care needs authorization, it writes the **278** request and reads the reviewer's answer: certified,
+with the number to put on the claim.
 
 It has an **AI Chat** (F12) and an **MCP server**, so Claude or a model on your own computer can go through the day's
 schedule, explain a rejection, or work out what a patient owes. **Agents see people's details masked** unless you say
@@ -88,6 +90,29 @@ that started or ended.
 ![A visit read for its day: act first, the authorization to get and whom to call, and the estimate with what it rests on](Screenshots/visit.png)
 
 **View › Export the Worklist** writes it as an HTML page or an Excel workbook.
+
+## Authorizations (278)
+
+When a payer's 271 says a visit's care needs authorization (the MRI in the samples), the **Authorizations** tab lists
+it with who reviews it (the utilization review the 271 names, or the payer) and their number. **Write the 278** (on
+the tab, or File › Write the 278 for Authorizations) writes the request (005010X217) for every such visit with no
+answer yet: a health services review of the visit's care, with its date, diagnosis, provider and procedure, under the
+same settings as the 270. A 278 needs a diagnosis, so the appointment list takes a **Diagnosis** column (ICD-10-CM);
+a visit without one is left out, and the tab says why.
+
+Open the reviewer's 278 answer and the visit's "needs authorization" note gives way to the decision:
+
+- **certified**: the review number to put on the claim (REF*G1), and the dates it runs, checked against the visit's;
+- **partly certified** or **modified**: what to check before the visit;
+- **pended**: follow up before the visit;
+- **not certified**: tell the patient; ask for reconsideration with the records, reschedule, or the patient agrees to
+  pay;
+- **contact the payer**, **cancelled**, **not needed**, or **refused** (an AAA, with what to fix).
+
+Nothing is sent: the 278 is a file for the clearinghouse. Payers support the 278 unevenly; where one takes requests
+only by phone or on its portal, the tab shows the number to call.
+
+![The Authorizations tab: the MRI certified, with the number for the claim and the dates it runs](Screenshots/authorizations.png)
 
 ### Denied claims, asked about again
 
@@ -164,6 +189,7 @@ AVAEligibility --mcp --http 8779 --root /path/to/files [--token TOKEN] [--cert C
 | `explain_code`, `search_codes` | Any 270/271 code's meaning (and what to do about a rejection); codes by words |
 | `get_appointments`, `check_appointments`, `service_types_for` | The visits and what each asks about; the checks before sending; what a procedure asks about |
 | `write_inquiry` | Writes the 270 (values allowed only) |
+| `get_authorizations`, `write_auth_request` | The visits needing authorization and where each stands (not asked, waiting, certified with its number, pended, refused); the 278 requests (values allowed only) |
 | `get_worklist`, `get_visit`, `estimate`, `compare_answers` | The day's verdicts (and, for a denied claim asked about again, what the answer means for the denial); a visit in full; what-if estimates; what changed since an earlier answer |
 | `export_worklist` | The worklist report, `.html` or `.xlsx` (masked unless allowed) |
 | `ask_clearinghouse` | Sends the day's questions in real time (the open window only, after the person's yes) |
@@ -172,7 +198,7 @@ AVAEligibility --mcp --http 8779 --root /path/to/files [--token TOKEN] [--cert C
 | `checkpoint`, `diff`, `render_checkpoint`, `restore_checkpoint` | Remember what's open and the view, see what changed, go back |
 
 Recipes (MCP prompts): check the day's schedule, explain a rejected inquiry, a visit's next step, what the patient may
-owe, what changed since the last check, fix the list and ask again, find other payers, and the day's report. Each is
+owe, what changed since the last check, fix the list and ask again, find other payers, the visits that need authorization, and the day's report. Each is
 run call by call in the tests.
 
 ## Command line
@@ -189,6 +215,7 @@ AVAEligibility --mcp [--attach] [--root FOLDER] [--real | --mask] [--http [ADDRE
 - `clinic-270.x12`, exactly what the app writes from that list;
 - the 271s its four payers sent back: a PPO, Medicaid managed care, an HMO, and one whose system was down;
 - `recheck/`, the PPO's answer when asked again two weeks later;
+- `authorizations/`, the 278 the app writes for the MRI (exactly), and the reviewer's answer certifying it;
 - `denied/`, AVA Remittance's list of three claims Tallgrass Medicaid denied for coverage (another invented clinic's),
   and the 271 for their dates of service: coverage ended, a member ID with two digits swapped, and coverage added
   back-dated to before the visit.
@@ -199,8 +226,8 @@ ID suffix, not found, the payer down, and self-pay. Every person, payer, member 
 
 ## What it isn't
 
-It isn't a clearinghouse or a practice-management system. It reads only 005010X279A1. It doesn't do 276/277 claim
-status or 278 authorization requests; it says when an authorization is needed and whom to call. A 271 isn't a promise
+It isn't a clearinghouse or a practice-management system. It reads 005010X279A1 270s and 271s and 005010X217 278s. It
+doesn't do 276/277 claim status, and it doesn't send 278s in real time: it writes them, and reads the answers. A 271 isn't a promise
 of payment, and the estimates are estimates. Payers' companion guides can differ on service types and how they answer.
 
 ## Building

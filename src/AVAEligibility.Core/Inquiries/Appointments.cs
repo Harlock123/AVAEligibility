@@ -27,6 +27,9 @@ public sealed record Appointment
     public string Procedure { get; init; } = "";
     public decimal? Charge { get; init; }
 
+    /// <summary>The visit's diagnosis (ICD-10-CM), which a 278 authorization request needs; optional for the 270.</summary>
+    public string Diagnosis { get; init; } = "";
+
     /// <summary>The claim's account number, when the row is a denied claim asked about again.</summary>
     public string Account { get; init; } = "";
 
@@ -84,6 +87,7 @@ public static class AppointmentList
         ["visit"] = ["visit", "visit type", "reason", "appointment type"],
         ["procedure"] = ["procedure", "cpt", "procedure code", "code"],
         ["charge"] = ["charge", "fee", "amount"],
+        ["diagnosis"] = ["diagnosis", "dx", "icd-10", "icd10", "diagnosis code"],
         ["account"] = ["account", "patient account", "account number"],
         ["denial"] = ["denial", "denied", "denial reason"],
     };
@@ -151,6 +155,7 @@ public static class AppointmentList
                 Visit = Get("visit"),
                 Procedure = Get("procedure").ToUpperInvariant(),
                 Charge = decimal.TryParse(charge.TrimStart('$'), NumberStyles.Number, CultureInfo.InvariantCulture, out var c) ? c : null,
+                Diagnosis = Get("diagnosis").ToUpperInvariant(),
                 Account = Get("account"),
                 Denial = Get("denial"),
                 Unread = unread,

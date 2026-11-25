@@ -168,6 +168,11 @@ public sealed partial class MainWindow : Window
                 OpenOther(full);
                 return;
             }
+            if (Core.Authorizations.AuthReader.LooksLikeOne(full))
+            {
+                OpenAuth(full);
+                return;
+            }
             var file = EligibilityReader.Load(full);
             if (file.Transactions.Count == 0)
             {

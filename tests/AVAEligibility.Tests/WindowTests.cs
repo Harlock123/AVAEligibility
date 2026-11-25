@@ -220,4 +220,40 @@ public sealed class SendingWindowTests
         }
         finally { w.Close(); }
     });
+
+    [Fact]
+    public void The_MRI_is_authorized_through_a_278_and_the_worklist_says_so() => HeadlessApp.Run(() =>
+    {
+        var folder = Samples.Copy();
+        var w = new MainWindow { Now = () => InquiryTests.SampleTime };
+        w.Settings.Inquiry = AuthTests.Settings;
+        w.Show();
+        try
+        {
+            w.Open(Path.Combine(folder, "appointments.csv"));
+            foreach (var f in WorklistTests.AnswerFiles) w.Open(Path.Combine(folder, f));
+            var need = Assert.Single(w.AuthNeeds);
+            Assert.Equal("KENJI", need.Appointment.First);
+            var path = Path.Combine(folder, "asked.x12");
+            w.PickSaveFile = (_, _) => Task.FromResult<string?>(path);
+            HeadlessApp.Wait(w.WriteAuth());
+            Assert.Equal(File.ReadAllText(Path.Combine(folder, "authorizations", "clinic-278.x12")), File.ReadAllText(path));
+            Assert.Equal(1003, w.Settings.Inquiry.ControlNumber);
+            Assert.Equal(3, w.Tabs.SelectedIndex);
+            Assert.Equal("Wrote asked.x12: 1 authorization request. Send it through the clearinghouse, then open the answer.", w.txtStatusBar.Text);
+            Assert.Equal("This visit's authorization was asked for (BWA001); no answer is open yet.", w.Work.Single(x => x.Appointment.First == "KENJI").Headline);
+
+            w.Open(Path.Combine(folder, "authorizations", "bluewater-278.x12"));
+            Assert.Equal("Opened bluewater-278.x12: a 278 answer about 1 visit: 1 certified.", w.txtStatusBar.Text);
+            var texts = w.AuthPanel.GetLogicalDescendants().OfType<Avalonia.Controls.TextBlock>().Select(t => t.Text ?? "").ToList();
+            Assert.Contains("certified", texts);
+            Assert.Contains("Authorized: BWUR2611250042, 2026-12-02 to 2027-01-01. Put BWUR2611250042 on the claim (REF*G1).", texts);
+            Assert.Contains(w.Work.Single(x => x.Appointment.First == "KENJI").Notes, n => n.Text.StartsWith("Authorized: BWUR2611250042"));
+            HeadlessApp.Wait(w.WriteAuth());
+            Assert.Equal("Every visit that needs authorization has its 278 answer open.", w.txtStatusBar.Text);
+            w.CloseAuth(w.Reviews.Single(r => r.IsResponse));
+            Assert.Equal("This visit's authorization was asked for (BWA001); no answer is open yet.", w.Work.Single(x => x.Appointment.First == "KENJI").Headline);
+        }
+        finally { w.Close(); }
+    });
 }

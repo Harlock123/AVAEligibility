@@ -337,6 +337,59 @@ def denied_271():
     return wrap(5201, "HB", "TGM01X", "RIVERBEND", [transaction("271", 1, body)])
 
 
+# ───────────────────────────── the 278 ─────────────────────────────
+
+# Each visit's diagnosis (ICD-10-CM), by its procedure: the appointment list's Diagnosis column, which a 278 needs.
+DIAGNOSIS = {"99213": "J06.9", "99214": "I10", "99393": "Z00.129", "90837": "F41.1", "72148": "M54.16"}
+AUTH_CONTROL = 1002
+AUTH_TRACE = "BWA001"
+AUTH_NUMBER = "BWUR2611250042"
+
+
+def auth_envelope(sender, receiver, time, control, body):
+    out = ["ISA*00*          *00*          *ZZ*{:<15}*ZZ*{:<15}*{}*{}*^*00501*{:09d}*0*T*:~".format(sender, receiver, ASKED[2:], time, control),
+           seg("GS", "HI", sender, receiver, ASKED, time, control, "X", "005010X217"),
+           seg("ST", "278", "0001", "005010X217")] + body + [seg("SE", len(body) + 2, "0001"), seg("GE", 1, control), seg("IEA", 1, "{:09d}".format(control))]
+    return "\n".join(out) + "\n"
+
+
+def auth_people(kenji):
+    _, _, last, first, _, dob, sex, payer, member, provider, _, procedure, charge, _, _ = kenji
+    return last, first, dob, sex, payer, member, provider, procedure, charge
+
+
+def auth_request():
+    """The 278 the app writes for the samples' one visit that needs authorization: Kenji's lumbar MRI (AVA Eligibility's
+    AuthRequests.Build with the samples' settings, control number 1002): it must match byte for byte."""
+    kenji = next(p for p in PATIENTS if p[3] == "KENJI")
+    last, first, dob, sex, payer, member, provider, procedure, charge = auth_people(kenji)
+    body = [seg("BHT", "0007", "13", "MSFMA001", ASKED, ASKED_TIME),
+            seg("HL", 1, "", 20, 1), seg("NM1", "X3", 2, "BLUEWATER UTILIZATION REVIEW", "", "", "", "", "PI", payer),
+            seg("HL", 2, 1, 21, 1), seg("NM1", "1P", 2, CLINIC, "", "", "", "", "XX", CLINIC_NPI),
+            seg("HL", 3, 2, 22, 1), seg("NM1", "IL", 1, last, first, "", "", "", "MI", member), seg("DMG", "D8", dob, sex),
+            seg("HL", 4, 3, "EV", 1), seg("TRN", 1, AUTH_TRACE, CLINIC_TRN), seg("UM", "HS", "I", "62", "11:B"), seg("DTP", "AAH", "D8", "20261202"),
+            seg("HI", "ABK:" + DIAGNOSIS[procedure].replace(".", "")), seg("NM1", "SJ", 1, provider[0], provider[1], "", "", "", "XX", provider[2]),
+            seg("HL", 5, 4, "SS", 0), seg("UM", "HS", "I"), seg("DTP", "472", "D8", "20261202"), seg("SV1", "HC:" + procedure, "{:g}".format(charge), "UN", 1)]
+    return auth_envelope("MAPLESTFM", "CLEARHOUSE01", ASKED_TIME, AUTH_CONTROL, body)
+
+
+def auth_answer():
+    """Bluewater's utilization review answers: certified, with the number for the claim, for 2 December to 1 January."""
+    kenji = next(p for p in PATIENTS if p[3] == "KENJI")
+    last, first, dob, sex, payer, member, provider, procedure, charge = auth_people(kenji)
+    body = [seg("BHT", "0007", "11", "RBWHP1A001", ASKED, "0930"),
+            seg("HL", 1, "", 20, 1), seg("NM1", "X3", 2, "BLUEWATER UTILIZATION REVIEW", "", "", "", "", "PI", payer),
+            seg("PER", "IC", "", "TE", "8005550147"),
+            seg("HL", 2, 1, 21, 1), seg("NM1", "1P", 2, CLINIC, "", "", "", "", "XX", CLINIC_NPI),
+            seg("HL", 3, 2, 22, 1), seg("NM1", "IL", 1, last, first, "", "", "", "MI", member), seg("DMG", "D8", dob, sex),
+            seg("HL", 4, 3, "EV", 1), seg("TRN", 2, AUTH_TRACE, CLINIC_TRN), seg("UM", "HS", "I", "62", "11:B"), seg("HCR", "A1", AUTH_NUMBER),
+            seg("DTP", "AAH", "D8", "20261202"), seg("DTP", "102", "D8", "20261125"), seg("DTP", "007", "RD8", "20261202-20270101"),
+            seg("HI", "ABK:" + DIAGNOSIS[procedure].replace(".", "")), seg("NM1", "SJ", 1, provider[0], provider[1], "", "", "", "XX", provider[2]),
+            seg("HL", 5, 4, "SS", 0), seg("UM", "HS", "I"), seg("HCR", "A1", AUTH_NUMBER), seg("DTP", "472", "D8", "20261202"),
+            seg("SV1", "HC:" + procedure, "{:g}".format(charge), "UN", 1)]
+    return auth_envelope("BWHP1X", "MAPLESTFM", "0930", 5301, body)
+
+
 def main():
     os.chdir(HERE)
     with open("clinic-270.x12", "w", newline="\n") as f:
@@ -347,6 +400,11 @@ def main():
     os.makedirs("recheck", exist_ok=True)
     with open(os.path.join("recheck", "bluewater-271-dec15.x12"), "w", newline="\n") as f:
         f.write(recheck())
+    os.makedirs("authorizations", exist_ok=True)
+    with open(os.path.join("authorizations", "clinic-278.x12"), "w", newline="\n") as f:
+        f.write(auth_request())
+    with open(os.path.join("authorizations", "bluewater-278.x12"), "w", newline="\n") as f:
+        f.write(auth_answer())
     os.makedirs("denied", exist_ok=True)
     with open(os.path.join("denied", "eligibility-recheck.csv"), "w", newline="") as f:
         f.write(DENIED_LIST)
@@ -354,11 +412,11 @@ def main():
         f.write(denied_271())
     with open("appointments.csv", "w", newline="") as f:
         w = csv.writer(f, lineterminator="\n")
-        w.writerow(["Date", "Time", "Last name", "First name", "Middle", "Birth date", "Sex", "Payer ID", "Payer", "Member ID", "Subscriber", "Provider", "Provider NPI", "Visit", "Procedure", "Charge"])
+        w.writerow(["Date", "Time", "Last name", "First name", "Middle", "Birth date", "Sex", "Payer ID", "Payer", "Member ID", "Subscriber", "Provider", "Provider NPI", "Visit", "Procedure", "Charge", "Diagnosis"])
         for p in PATIENTS:
             date, time, last, first, middle, dob, sex, payer, member, provider, visit, procedure, charge, trace, _ = p
             subscriber = "HARTWELL, DANIEL" if first == "EMMA" else "self"
-            w.writerow([date, time, last, first, middle, "{}-{}-{}".format(dob[:4], dob[4:6], dob[6:]), sex, payer, PAYERS.get(payer, "Self-pay"), member, subscriber, "{}, {}".format(provider[0], provider[1]), provider[2], visit, procedure, "{:.2f}".format(charge)])
+            w.writerow([date, time, last, first, middle, "{}-{}-{}".format(dob[:4], dob[4:6], dob[6:]), sex, payer, PAYERS.get(payer, "Self-pay"), member, subscriber, "{}, {}".format(provider[0], provider[1]), provider[2], visit, procedure, "{:.2f}".format(charge), DIAGNOSIS[procedure]])
     print("Wrote clinic-270.x12, " + ", ".join("{}-271.x12".format(n.split()[0].lower()) for n in PAYERS.values()) + " and appointments.csv")
 
 

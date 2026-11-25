@@ -39,6 +39,12 @@ public interface IExplorerSession
     /// <summary>The 270s and 271s open.</summary>
     IReadOnlyList<EligibilityFile> Files { get; }
 
+    /// <summary>The 278s open, requests and answers.</summary>
+    IReadOnlyList<Core.Authorizations.AuthFile> Reviews { get; }
+
+    /// <summary>A 278 was written with the inquiry settings: the next control number.</summary>
+    void WroteAuth();
+
     /// <summary>The appointment list open (empty when none), and its file.</summary>
     IReadOnlyList<Appointment> Appointments { get; }
     string? AppointmentsPath { get; }
@@ -180,6 +186,10 @@ public sealed class ExplorerBusyException(string message) : Exception(message);
 public sealed class HeadlessSession(bool seeRealValues = false, InquirySettings? inquiry = null, Func<DateTime>? now = null) : IExplorerSession
 {
     private readonly List<EligibilityFile> _files = [];
+    private readonly List<Core.Authorizations.AuthFile> _reviews = [];
+
+    public IReadOnlyList<Core.Authorizations.AuthFile> Reviews => _reviews;
+    public void WroteAuth() => Inquiry = Inquiry with { ControlNumber = Inquiry.ControlNumber + 1 };
 
     public ViewState View { get; private set; } = ViewState.Empty;
     public bool SeeRealValues { get; set; } = seeRealValues;
@@ -188,7 +198,7 @@ public sealed class HeadlessSession(bool seeRealValues = false, InquirySettings?
     public string? AppointmentsPath { get; private set; }
     public IReadOnlyDictionary<Appointment, string>? Traces { get; set; }
     public InquirySettings Inquiry { get; set; } = inquiry ?? new InquirySettings();
-    public IReadOnlyList<WorkItem> Work => Appointments.Count == 0 ? [] : Worklist.Build(Appointments, _files, Traces, Inquiry.TraceOriginator is { Length: > 0 } o ? o : null);
+    public IReadOnlyList<WorkItem> Work => Appointments.Count == 0 ? [] : Worklist.Build(Appointments, _files, Traces, Inquiry.TraceOriginator is { Length: > 0 } o ? o : null, _reviews);
     public DateTime Now => (now ?? (() => DateTime.Now))();
     public Func<Task<string>>? AskClearinghouse => null;
 
@@ -202,9 +212,15 @@ public sealed class HeadlessSession(bool seeRealValues = false, InquirySettings?
             Traces = null;
             return;
         }
+        if (Core.Authorizations.AuthReader.LooksLikeOne(full))
+        {
+            _reviews.RemoveAll(f => f.Path == full);
+            _reviews.Add(Core.Authorizations.AuthReader.Load(full));
+            return;
+        }
         var file = EligibilityReader.Load(full);
         if (file.Transactions.Count == 0)
-            throw new NotSupportedException($"{Path.GetFileName(full)} isn't a 270, a 271 or an appointment list" + (file.Problems.Count > 0 ? $": {file.Problems[0]}" : "."));
+            throw new NotSupportedException($"{Path.GetFileName(full)} isn't a 270, a 271, a 278 or an appointment list" + (file.Problems.Count > 0 ? $": {file.Problems[0]}" : "."));
         Close(full);
         _files.Add(file);
     }
@@ -213,6 +229,7 @@ public sealed class HeadlessSession(bool seeRealValues = false, InquirySettings?
     {
         var full = Path.GetFullPath(path);
         _files.RemoveAll(f => f.Path == full);
+        _reviews.RemoveAll(f => f.Path == full);
         if (AppointmentsPath == full)
         {
             Appointments = [];

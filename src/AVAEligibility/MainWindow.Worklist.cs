@@ -33,6 +33,7 @@ public sealed partial class MainWindow
     private partial IEnumerable<object> LaterViewItems(Func<string, Action, Key?, KeyModifiers, MenuItem> item) =>
     [
         item("_Worklist", () => Tabs.SelectedIndex = 2, Key.D3, KeyModifiers.Control),
+        item("_Authorizations", () => Tabs.SelectedIndex = 3, Key.D4, KeyModifiers.Control),
         new Separator(),
         item("_Export the Worklist…", () => _ = ExportWorklist(), Key.E, KeyModifiers.Control),
     ];
@@ -51,7 +52,8 @@ public sealed partial class MainWindow
 
     private void FillWorklist()
     {
-        _work = _appointments.Count == 0 ? [] : Worklist.Build(_appointments, _open, _built?.Traces, Settings.Inquiry.TraceOriginator is { Length: > 0 } o ? o : null);
+        _work = _appointments.Count == 0 ? [] : Worklist.Build(_appointments, _open, _built?.Traces, Settings.Inquiry.TraceOriginator is { Length: > 0 } o ? o : null, _reviews);
+        FillAuth();
         WorklistPanel.Children.Clear();
         WorklistPanel.Children.Add(Heading("Worklist"));
         if (_work.Count == 0)

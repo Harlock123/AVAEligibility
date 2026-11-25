@@ -70,6 +70,28 @@ public sealed class Screenshots
     });
 
     [Fact]
+    public void Authorizations() => HeadlessApp.Run(() =>
+    {
+        if (Folder() is not { } dir) return;
+        var folder = Samples.Copy();
+        var w = new MainWindow { Width = 1500, Height = 640, Now = () => InquiryTests.SampleTime };
+        w.AgentSettings.ChatOpen = false;
+        w.Settings.Inquiry = AuthTests.Settings;
+        w.Show();
+        if (w.ChatHolder.IsVisible) w.ToggleChat();
+        try
+        {
+            w.Open(Path.Combine(folder, "appointments.csv"));
+            foreach (var f in WorklistTests.AnswerFiles) w.Open(Path.Combine(folder, f));
+            w.Open(Path.Combine(folder, "authorizations", "clinic-278.x12"));
+            w.Open(Path.Combine(folder, "authorizations", "bluewater-278.x12"));
+            w.Tabs.SelectedIndex = 3;
+            Save(w, Path.Combine(dir, "authorizations.png"));
+        }
+        finally { w.Close(); }
+    });
+
+    [Fact]
     public void Denied() => HeadlessApp.Run(() =>
     {
         if (Folder() is not { } dir) return;

@@ -1,3 +1,4 @@
+using AVAEligibility.Core.Authorizations;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -41,7 +42,7 @@ public sealed class AgentTests
     internal static readonly string[] ToolNames =
     [
         "list_files", "open_file", "close_file", "list_open", "list_people", "get_answer", "get_benefits", "get_segments", "explain_code", "search_codes",
-        "get_appointments", "check_appointments", "service_types_for", "write_inquiry", "get_worklist", "get_visit", "estimate", "compare_answers",
+        "get_appointments", "check_appointments", "service_types_for", "write_inquiry", "get_authorizations", "write_auth_request", "get_worklist", "get_visit", "estimate", "compare_answers",
         "export_worklist", "ask_clearinghouse", "get_view", "show_in_view", "render_view",
         "batch", "get_recording", "save_steps", "run_steps", "checkpoint", "diff", "render_checkpoint", "restore_checkpoint",
     ];
@@ -190,6 +191,35 @@ public sealed class AgentTests
     });
 
     [Fact]
+    public void The_MRI_needs_authorization_and_its_278_is_written_then_answered() => WithRig(rig =>
+    {
+        rig.Ok("open_file", new { file = "appointments.csv" });
+        rig.Ok("write_inquiry", new { output = "out/day.x12" });
+        foreach (var f in WorklistTests.AnswerFiles) rig.Ok("open_file", new { file = f });
+        var visit = rig.Ok("get_authorizations").GetProperty("visits").EnumerateArray().Single();
+        Assert.Equal(("V07", "not asked", "BLUEWATER UTILIZATION REVIEW", "800-555-0147", "M54.16"),
+            (visit.GetProperty("visit").GetString(), visit.GetProperty("status").GetString(), visit.GetProperty("reviewer").GetString(), visit.GetProperty("phone").GetString(), visit.GetProperty("diagnosis").GetString()));
+        var w = rig.Ok("write_auth_request", new { output = "out/auth.x12" });
+        Assert.Equal((1, 0), (w.GetProperty("requests").GetInt32(), w.GetProperty("left_out").GetInt32()));
+        Assert.Equal(File.ReadAllText(Samples.Path("authorizations/clinic-278.x12")), File.ReadAllText(Path.Combine(rig.Root, "out", "auth.x12")));
+        Assert.Equal("asked", rig.Ok("get_authorizations").GetProperty("visits")[0].GetProperty("status").GetString());
+        Assert.Equal("278 answer", rig.Ok("open_file", new { file = "authorizations/bluewater-278.x12" }).GetProperty("kind").GetString());
+        var done = rig.Ok("get_authorizations").GetProperty("visits")[0];
+        Assert.Equal(("certified", "BWUR2611250042", "2026-12-02 to 2027-01-01", "Certified in total"),
+            (done.GetProperty("status").GetString(), done.GetProperty("number").GetString(), done.GetProperty("runs").GetString(), done.GetProperty("decision").GetString()));
+        Assert.Contains("No visit needs a 278", rig.Error("write_auth_request", new { output = "out/again.x12" }));
+    }, real: true);
+
+    [Fact]
+    public void Writing_a_278_needs_values_allowed() => WithRig(rig =>
+    {
+        rig.Ok("open_file", new { file = "appointments.csv" });
+        foreach (var f in WorklistTests.AnswerFiles) rig.Ok("open_file", new { file = f });
+        Assert.Contains("holds people's names", rig.Error("write_auth_request", new { output = "out/auth.x12" }));
+        Assert.False(File.Exists(Path.Combine(rig.Root, "out", "auth.x12")));
+    });
+
+    [Fact]
     public void With_values_allowed_the_270_is_written_and_its_answers_match_by_trace() => WithRig(rig =>
     {
         rig.Ok("open_file", new { file = "appointments.csv" });
@@ -243,6 +273,8 @@ public sealed class AgentTests
             foreach (var s in p.Segments.Where(s => s.Id == "N3")) phi.Add(s[1]);
             foreach (var r in p.Benefits.SelectMany(b => b.References)) phi.Add(r.Value);
         }
+        foreach (var r in Directory.EnumerateFiles(Samples.Path("authorizations")).Select(AuthReader.Load).SelectMany(f => f.Reviews))
+            if (r.Number.Length > 0) phi.Add(r.Number);
         foreach (var a in AppointmentList.Load(Samples.Path("appointments.csv")).Concat(AppointmentList.Load(Samples.Path("denied/eligibility-recheck.csv"))))
         {
             if (a.Account.Length > 0) phi.Add(a.Account);
@@ -258,7 +290,7 @@ public sealed class AgentTests
     public void The_list_of_details_the_no_leak_test_looks_for_covers_every_kind()
     {
         var phi = Phi();
-        foreach (var real in new[] { "HARTWELL", "KOWALCZYK", "BWH40010O512", "SMH5512001", "1971-03-14", "19650218", "100 OAK ST", "4TQ8NJ2KR63", "2026-12-02", "VANTERPOOL", "RB26119", "TG55090123", "TG55090132", "2026-11-04", "SANTOS" }) Assert.Contains(real, phi);
+        foreach (var real in new[] { "HARTWELL", "KOWALCZYK", "BWH40010O512", "SMH5512001", "1971-03-14", "19650218", "100 OAK ST", "4TQ8NJ2KR63", "2026-12-02", "VANTERPOOL", "RB26119", "TG55090123", "TG55090132", "2026-11-04", "SANTOS", "BWUR2611250042" }) Assert.Contains(real, phi);
         Assert.True(phi.Count > 60, $"{phi.Count}");
     }
 
@@ -289,6 +321,11 @@ public sealed class AgentTests
         Check("compare_answers", new { person = handles[^7] });
         Check("get_appointments");
         Check("check_appointments");
+        Check("get_authorizations");
+        Check("open_file", new { file = "authorizations/clinic-278.x12" });
+        Check("open_file", new { file = "authorizations/bluewater-278.x12" });
+        Check("list_open");
+        Check("get_authorizations");
         Check("get_worklist");
         foreach (var w in rig.Session.Work)
         {
@@ -344,7 +381,7 @@ public sealed class AgentTests
     public void Every_recipe_runs_call_by_call_with_values_masked() => HeadlessApp.Run(() =>
     {
         var recipes = typeof(Recipes).GetMethods(BindingFlags.Public | BindingFlags.Static).Where(m => m.GetCustomAttribute<McpServerPromptAttribute>() != null).ToList();
-        Assert.Equal(8, recipes.Count);
+        Assert.Equal(9, recipes.Count);
         foreach (var recipe in recipes)
         {
             using var rig = new Rig();

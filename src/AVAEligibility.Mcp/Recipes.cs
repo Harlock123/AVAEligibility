@@ -37,6 +37,19 @@ public static class Recipes
         return r.Text("Start with the counts. Then list the visits to act on, worst first: what's wrong and exactly what to do (whom to call, what to get). Then rejections (fix and ask again) and no answers. Say the visits that are ready in one line. Estimates are estimates.");
     }
 
+    [McpServerPrompt(Name = "authorizations", Title = "The visits that need authorization")]
+    [Description("Lists the visits whose care needs authorization, where each stands (not asked, waiting, certified with its number, pended, refused) and what to do; reads a 278 answer when one is open.")]
+    public static string Authorizations([Description("The 278 answer to read, if one has come (default \"authorizations/bluewater-278.x12\").")] string? answer = null)
+    {
+        var r = new Recipe("Say which visits need authorization, where each stands, and what to do before the visit.");
+        OpenDay(r, null);
+        r.Step("Which visits need it, and the checks before a 278.", "get_authorizations", new { });
+        r.Step("The reviewer's answer, when it has come.", "open_file", new { file = Or(answer, "authorizations/bluewater-278.x12") });
+        r.Step("Where each stands now.", "get_authorizations", new { });
+        r.Step("The visit in full.", "get_visit", new { visit = "V07" });
+        return r.Text("For each visit: the care, who reviews it and their number, and where it stands. Certified: the number for the claim (REF*G1) and the dates it runs. Pended or refused: what to do before the visit. Not asked: the person writes the 278 (or you, with write_auth_request, when values are allowed), or calls. A missing diagnosis stops a 278: say so.");
+    }
+
     [McpServerPrompt(Name = "explain_a_rejection", Title = "Explain a rejected inquiry")]
     [Description("Explains why a payer couldn't answer about someone (an AAA rejection), what to check, and whether to ask again.")]
     public static string ExplainARejection([Description("The person's handle (default \"P04\").")] string? person = null)

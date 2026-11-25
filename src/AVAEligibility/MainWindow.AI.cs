@@ -64,7 +64,7 @@ public sealed partial class MainWindow
         ];
     }
 
-    private static readonly string[] TabNames = ["coverage", "inquiries", "worklist"];
+    private static readonly string[] TabNames = ["coverage", "inquiries", "worklist", "authorizations"];
 
     /// <summary>What the window shows, as agents see it: the tab, and the person shown (by handle).</summary>
     public ViewState CurrentView
@@ -98,8 +98,8 @@ public sealed partial class MainWindow
     {
         var full = Path.GetFullPath(path);
         Open(full);
-        if (_open.All(o => o.Path != full) && _appointmentsPath != full)
-            throw new NotSupportedException(txtStatusBar.Text is { Length: > 0 } said ? said : $"{Path.GetFileName(full)} isn't a 270, a 271 or an appointment list.");
+        if (_open.All(o => o.Path != full) && _appointmentsPath != full && _reviews.All(r => r.Path != full))
+            throw new NotSupportedException(txtStatusBar.Text is { Length: > 0 } said ? said : $"{Path.GetFileName(full)} isn't a 270, a 271, a 278 or an appointment list.");
     }
 
     /// <summary>Closes an open file (or the appointment list) for an agent.</summary>
@@ -112,6 +112,7 @@ public sealed partial class MainWindow
             _appointmentsPath = null;
             _built = null;
         }
+        _reviews.RemoveAll(r => r.Path == full);
         if (_open.FirstOrDefault(o => o.Path == full) is { } f)
         {
             _open.Remove(f);

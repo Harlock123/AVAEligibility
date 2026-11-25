@@ -38,10 +38,12 @@ public sealed record WorkItem(Appointment Appointment, Answer Answer, Interpreta
 /// </summary>
 public static class Worklist
 {
-    public static IReadOnlyList<WorkItem> Build(IReadOnlyList<Appointment> appointments, IReadOnlyList<EligibilityFile> answers, IReadOnlyDictionary<Appointment, string>? traces = null, string? originator = null) =>
-        [.. appointments.Select(a => Item(a, Matcher.For(a, answers, traces != null && traces.TryGetValue(a, out var t) ? t : null, originator)))];
+    public static IReadOnlyList<WorkItem> Build(IReadOnlyList<Appointment> appointments, IReadOnlyList<EligibilityFile> answers, IReadOnlyDictionary<Appointment, string>? traces = null, string? originator = null,
+        IReadOnlyList<Authorizations.AuthFile>? reviews = null) =>
+        [.. appointments.Select(a => Item(a, Matcher.For(a, answers, traces != null && traces.TryGetValue(a, out var t) ? t : null, originator), reviews))];
 
-    public static WorkItem Item(Appointment a, Answer answer)
+    /// <param name="reviews">The open 278s: a visit that needs authorization reads its review there (certified, pended, refused).</param>
+    public static WorkItem Item(Appointment a, Answer answer, IReadOnlyList<Authorizations.AuthFile>? reviews = null)
     {
         var notes = new List<Note>();
         if (a.SelfPay)
@@ -70,7 +72,16 @@ public static class Worklist
         {
             Mismatches(a, p, notes);
             if (a.Denied) AfterDenial(a, reading, notes);
-            else ForTheVisit(a, reading, notes);
+            else
+            {
+                ForTheVisit(a, reading, notes);
+                if (reviews is { Count: > 0 } && Authorizations.AuthRequests.For(a, reading) is { } need && Authorizations.AuthRequests.For(a, reviews) is { } review)
+                {
+                    // The review answers the "needs authorization" note: what it decided takes that note's place.
+                    notes.RemoveAll(n => n.Segments.Contains(need.Benefit.Segment));
+                    notes.Add(Authorizations.AuthRequests.Read(review, need));
+                }
+            }
         }
         var verdict = notes.Count == 0 ? Verdict.Ready : notes.Max(n => n.Level);
         return new WorkItem(a, answer, reading, verdict, notes, verdict is Verdict.Rejected or Verdict.NoAnswer || a.Denied ? null : Estimate(a, reading));

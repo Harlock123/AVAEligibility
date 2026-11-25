@@ -7,7 +7,8 @@ how the code is put together and the rules that keep it working.
 
 A HIPAA eligibility workbench in C# on .NET 10 and Avalonia 11.3: it reads 270 inquiries and 271 answers (005010X279A1)
 and says what each answer means for each patient and visit, in plain words; it checks an appointment list and writes the
-270, asks a clearinghouse in real time (CAQH CORE, off until turned on), and keeps the day's worklist. It has an AI Chat
+270, asks a clearinghouse in real time (CAQH CORE, off until turned on), and keeps the day's worklist. For visits whose
+care needs authorization it writes the 278 request and reads the answer (005010X217). It has an AI Chat
 (F12) and an MCP server (`--mcp`, `--mcp --attach`, `--http`, port 8779); agents see people's details masked unless the
 person allows otherwise.
 
@@ -47,10 +48,18 @@ ELIG_SHOTS=Screenshots dotnet test --filter Screenshots     # the README's pictu
     a payer that refused the whole batch answers everyone asked of it), `Worklist` (each appointment's `WorkItem`: its
     answer read for the visit's date and care, plus what only the visit tells: its care needs authorization or isn't
     covered, it uses one of a limited number of visits, it's with someone other than the PCP, the payer has the
-    patient's ID, name or birth date differently; and an `Estimate`; for a denied claim, `AfterDenial` instead of the
+    patient's ID, name or birth date differently; a 278 review's decision in place of "needs authorization"; and an
+    `Estimate`; for a denied claim, `AfterDenial` instead of the
     visit's notes and the estimate: whether the 271 for the date of service agrees with the denial, contradicts it, or
     shows why the claim didn't match), `Changes` (what changed between two answers about
     the same person).
+  - `Authorizations/`: `AuthModel` (`AuthCodes`: HCR01 actions, UM01 categories, UM02 certification types, from
+    X217; HCR03 reasons are an external list, shown as codes; `AuthFile`, `AuthReview`, `AuthService`), `AuthReader`
+    (278 requests and answers by HL level 20, 21, 22, 23, EV, SS; an AAA above the event applies to every review under
+    it), `AuthRequests` (`Needed`: the visits whose care the 271 says needs authorization, with the 2120 X3 reviewer;
+    `Check`: a 278 needs a diagnosis; `Build`: one 278 transaction per visit, HS review, initial, the care's service
+    type, office, the date, diagnosis, provider and procedure; `For`: a visit's review among the open 278s, answers
+    first; `Read`: what the decision means for the visit, as a note).
   - `Reports/WorklistReport.cs`: the worklist as an HTML page or an Excel workbook.
   - `Privacy/Masker.cs`: people's details as agents see them: every name, ID, identifier and address in the open files
     and the appointment list masked to its shape wherever it turns up, addresses hidden, every date to its year.
@@ -61,13 +70,14 @@ ELIG_SHOTS=Screenshots dotnet test --filter Screenshots     # the README's pictu
 - `src/AVAEligibility/`: the window, built in code (`MainWindow.cs`: the list, the Coverage tab and the segments;
   `MainWindow.Answer.cs`: the reading of an answer, verdict first; `MainWindow.Inquiries.cs`: the Inquiries tab, the
   settings and Write the 270; `MainWindow.Worklist.cs`: the Worklist tab and its export;
-  `MainWindow.Sending.cs`: the Clearinghouse section and Ask Now (asks first); `Settings.cs`: the settings file, in `MainWindow.SettingsFolder`, which tests point at a
+  `MainWindow.Sending.cs`: the Clearinghouse section and Ask Now (asks first); `MainWindow.Authorizations.cs`: the
+  Authorizations tab, Write the 278 and the open 278s; `Settings.cs`: the settings file, in `MainWindow.SettingsFolder`, which tests point at a
   temporary folder;
   `MainWindow.Parts.cs`: the hooks later parts fill).
 - `src/AVAEligibility.Mcp/`: the MCP server, no Avalonia. `EligibilityTools.cs` (the tools; people by handle, P01…
   and V01…; `Finish` masks every string of every answer unless values are allowed), `EligibilityTools.Orchestration.cs`
   (batch, steps files, checkpoints of what's open and the view), `Hosting.cs` (`ViewState`, `IExplorerSession`,
-  `HeadlessSession`), `EligibilityServer.cs` (the instructions), `Recipes.cs` (8). `LiveListener`, `LiveBridge`,
+  `HeadlessSession`), `EligibilityServer.cs` (the instructions), `Recipes.cs` (9). `LiveListener`, `LiveBridge`,
   `NetworkListener`, `McpCommandLine`, `Workspace` and `Json` are AVAClaimScrubber's with the names changed.
 - `src/AVAEligibility/`'s AI side: `MainWindow.AI.cs` (the AI menu, the chat's dock, the view as agents see and set it),
   `MainWindow.Agents.cs` (the doors, `AgentsSeeRealValues`), `Agents/` (`Chat/` and `ChatPanel.cs`: copies of AVA
@@ -80,7 +90,8 @@ ELIG_SHOTS=Screenshots dotnet test --filter Screenshots     # the README's pictu
   has one situation planted (see `PATIENTS` there). `recheck/` holds Bluewater's answer when asked again on 15
   December (kept out of `samples/` itself so opening the folder opens one day's answers). `denied/` holds AVA
   Remittance's Check Eligibility Again list (a copy of its `samples/recheck/eligibility-recheck.csv`, another invented
-  clinic's patients) and Tallgrass's 271 for their dates of service (see `DENIED_LIST`).
+  clinic's patients) and Tallgrass's 271 for their dates of service (see `DENIED_LIST`). `authorizations/` holds the
+  278 the app writes for Kenji's MRI and the reviewer's answer (see `auth_request` and `auth_answer`).
 
 ## Rules that keep it working
 
@@ -103,6 +114,9 @@ ELIG_SHOTS=Screenshots dotnet test --filter Screenshots     # the README's pictu
   on 127.0.0.1; never add a test that reaches a real clearinghouse. The password never goes in `settings.json`.
 - **AVA Remittance writes the denied list.** `samples/denied/eligibility-recheck.csv` is its output, copied; the
   columns are shared (fix both apps together), and `DeniedTests` pins what each answer means for its denial.
+- **The samples' 278 is what the app writes.** `AuthTests` builds it with the samples' settings (control number 1002)
+  and compares it byte for byte with `authorizations/clinic-278.x12`: change `AuthRequests.Build` and
+  `make_samples.py` together. Nothing sends a 278.
 - **The samples' 270 is what the app writes.** `InquiryTests` builds it from `appointments.csv` with the samples'
   settings and compares it byte for byte with `clinic-270.x12`: change the builder and `make_samples.py` together.
 - **Waiting on the UI thread:** a window test that awaits work started on the UI thread uses `HeadlessApp.Wait`, which
@@ -112,7 +126,7 @@ ELIG_SHOTS=Screenshots dotnet test --filter Screenshots     # the README's pictu
   or visit date from the samples (`Phi()`). A new tool goes into it; a new place people's details come from goes into
   `Masker` and `Phi()`.
 - **Agents never send and never write people's details unasked.** `ask_clearinghouse` runs only in the open window and
-  goes through Ask Now's question; `write_inquiry` needs values allowed; reports are masked unless allowed.
+  goes through Ask Now's question; `write_inquiry` and `write_auth_request` need values allowed; reports are masked unless allowed.
 - **New tools** need `[Description]` on the tool and every parameter (snake_case names), a place in
   `AgentTests.ToolNames`, a test, and a line in the README. Recipes are run call by call.
 - **No real data in the repository.** Every person, payer, member ID and NPI in the samples is invented.
